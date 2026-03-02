@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
-  import * as Table from '$lib/components/ui/table';
+  import TradingCard from '$lib/components/Card.svelte';
 
   const API = import.meta.env.VITE_API_URL ?? '';
 
@@ -22,59 +22,31 @@
   let error = $state('');
   let success = $state('');
 
-  // Create set form
+  // View: 'sets' | 'cards' — dynamic, no stacked columns
+  let view: 'sets' | 'cards' = $state('sets');
+
+  // Modals
   let showCreateSet = $state(false);
+  let showAddCard = $state(false);
+  let previewCard: CardItem | null = $state(null);
+
+  // Create set form
   let newSetName = $state('');
-  let newSetSlug = $state('');
   let newSetDescription = $state('');
   let creatingSet = $state(false);
 
-  // Add card form
-  let showAddCard = $state(false);
+  // Add card form (simplified: name, rarity, set name disabled, image)
   let cardName = $state('');
-  let cardNumber = $state('');
   let cardRarity = $state('common');
-  let cardSetName = $state('');
-  let cardQuote = $state('');
-  let cardArtwork = $state('');
-  let cardTypes = $state('TradingCard');
-  let cardSubtypes = $state('trading-cards');
-  let cardSupertype = $state('trading-card');
   let cardImageFile: File | null = $state(null);
   let addingCard = $state(false);
   let imagePreviewUrl = $state('');
 
-  // Camera capture
+  // Camera
   let showCamera = $state(false);
   let cameraError = $state('');
   let videoEl: HTMLVideoElement | null = $state(null);
   let mediaStream: MediaStream | null = $state(null);
-
-  function startCamera() {
-    if (mediaStream || !videoEl) return;
-    cameraError = '';
-    navigator.mediaDevices.getUserMedia({ video: true })
-      .then((stream) => {
-        mediaStream = stream;
-        if (videoEl) {
-          videoEl.srcObject = stream;
-          videoEl.play();
-        }
-      })
-      .catch((e) => {
-        cameraError = e.message || 'Camera access denied';
-        showCamera = false;
-      });
-  }
-
-  function stopCamera() {
-    if (mediaStream) {
-      mediaStream.getTracks().forEach((t) => t.stop());
-      mediaStream = null;
-    }
-    if (videoEl) videoEl.srcObject = null;
-    videoEl = null;
-  }
 
   function setCardImageFile(file: File | null) {
     if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
@@ -89,6 +61,33 @@
     if (input) input.value = '';
     cameraError = '';
     showCamera = true;
+  }
+
+  function stopCamera() {
+    if (mediaStream) {
+      mediaStream.getTracks().forEach((t) => t.stop());
+      mediaStream = null;
+    }
+    if (videoEl) videoEl.srcObject = null;
+    // Do not set videoEl = null here — the $effect cleanup runs when videoEl is first set and would clear the ref before startCamera() runs.
+  }
+
+  function startCamera() {
+    if (mediaStream || !videoEl) return;
+    cameraError = '';
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then((stream) => {
+        mediaStream = stream;
+        if (videoEl) {
+          videoEl.srcObject = stream;
+          const p = videoEl.play();
+          if (p !== undefined) p.catch(() => {});
+        }
+      })
+      .catch((e) => {
+        cameraError = e.message || 'Camera access denied';
+        showCamera = false;
+      });
   }
 
   function capturePhoto() {
@@ -152,10 +151,22 @@
     cards = data.cards || [];
   }
 
-  function selectSet(s: CardSet) {
+  function openSet(s: CardSet) {
     selectedSet = s;
+    loadCards(s.id);
+    view = 'cards';
+  }
+
+  function backToSets() {
+    view = 'sets';
+    selectedSet = null;
     cards = [];
-    if (s) loadCards(s.id);
+  }
+
+  function openCreateSet() {
+    showCreateSet = true;
+    newSetName = '';
+    newSetDescription = '';
   }
 
   async function createSet() {
@@ -166,7 +177,7 @@
     try {
       const form = new FormData();
       form.append('name', newSetName.trim());
-      form.append('slug', newSetSlug.trim());
+      form.append('slug', '');
       form.append('description', newSetDescription.trim());
       const res = await fetch(`${API}/api/admin/sets`, {
         method: 'POST',
@@ -179,9 +190,6 @@
       }
       const created = await res.json();
       sets = [...sets, created];
-      newSetName = '';
-      newSetSlug = '';
-      newSetDescription = '';
       showCreateSet = false;
       success = 'Set created.';
     } catch (e) {
@@ -191,10 +199,13 @@
     }
   }
 
-  function setAddCardDefaults() {
-    if (selectedSet) {
-      cardSetName = selectedSet.name;
-    }
+  function openAddCard() {
+    if (!selectedSet) return;
+    cardName = '';
+    cardRarity = 'common';
+    setCardImageFile(null);
+    showCamera = false;
+    showAddCard = true;
   }
 
   async function addCard() {
@@ -205,14 +216,14 @@
     try {
       const form = new FormData();
       form.append('name', cardName.trim());
-      form.append('number', cardNumber.trim());
+      form.append('number', '');
       form.append('rarity', cardRarity);
-      form.append('set_name', cardSetName.trim());
-      form.append('quote', cardQuote.trim());
-      form.append('artwork', cardArtwork.trim());
-      form.append('types', cardTypes.trim());
-      form.append('subtypes', cardSubtypes.trim());
-      form.append('supertype', cardSupertype.trim());
+      form.append('set_name', selectedSet.name);
+      form.append('quote', '');
+      form.append('artwork', '');
+      form.append('types', 'TradingCard');
+      form.append('subtypes', 'trading-cards');
+      form.append('supertype', 'trading-card');
       if (cardImageFile) form.append('image', cardImageFile);
       const res = await fetch(`${API}/api/admin/sets/${selectedSet.id}/cards`, {
         method: 'POST',
@@ -225,12 +236,6 @@
       }
       const created = await res.json();
       cards = [...cards, created];
-      cardName = '';
-      cardNumber = '';
-      cardQuote = '';
-      cardArtwork = '';
-      setCardImageFile(null);
-      showCamera = false;
       showAddCard = false;
       success = 'Card added.';
     } catch (e) {
@@ -245,267 +250,240 @@
     const base = API.replace(/\/$/, '');
     return path.startsWith('/') ? `${base}${path}` : `${base}/uploads/${path}`;
   }
+
+  function closeCreateSet() {
+    showCreateSet = false;
+  }
+
+  function closeAddCard() {
+    showAddCard = false;
+    showCamera = false;
+    stopCamera();
+    videoEl = null;
+  }
 </script>
 
-<main class="admin-page py-6 px-4">
-  <Card.Root class="border border-border bg-card text-card-foreground rounded-xl mb-6">
-    <Card.Header class="flex flex-row flex-wrap items-center justify-between gap-4 pb-4 border-b border-border">
-      <div>
-        <Card.Title class="text-xl font-semibold">Manage Cards</Card.Title>
-        <Card.Description class="text-muted-foreground text-sm mt-1">
-          Card collections and sets
-          {#if user}
-            · Logged in as @{user.username}
-          {/if}
-        </Card.Description>
-      </div>
-      <div class="flex gap-2">
-        <Button variant="outline" size="sm" href="/admin">Admin</Button>
-        <Button variant="outline" size="sm" href="/wallet">Wallet</Button>
-      </div>
-    </Card.Header>
-  </Card.Root>
+<main class="manage-cards-page py-4 px-3 sm:py-6 sm:px-4">
+  <!-- Header -->
+  <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+    <div class="flex items-center gap-2">
+      {#if view === 'cards' && selectedSet}
+        <Button variant="ghost" size="icon-sm" onclick={backToSets} aria-label="Back to sets">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        </Button>
+        <div>
+          <h1 class="text-xl font-semibold">{selectedSet.name}</h1>
+          <p class="text-muted-foreground text-sm">{cards.length} cards</p>
+        </div>
+      {:else}
+        <div>
+          <h1 class="text-xl font-semibold">Manage Cards</h1>
+          <p class="text-muted-foreground text-sm">Sets and collections</p>
+        </div>
+      {/if}
+    </div>
+    <div class="flex gap-2">
+      {#if view === 'sets'}
+        <Button size="sm" onclick={openCreateSet}>New set</Button>
+      {:else if selectedSet}
+        <Button size="sm" onclick={openAddCard}>Add card</Button>
+      {/if}
+      <Button variant="outline" size="sm" href="/admin">Admin</Button>
+      <Button variant="outline" size="sm" href="/wallet">Wallet</Button>
+    </div>
+  </header>
+
+  {#if error}
+    <div class="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">{error}</div>
+  {/if}
+  {#if success}
+    <div class="mb-4 p-3 rounded-lg bg-green-500/10 text-green-700 dark:text-green-400 text-sm">{success}</div>
+  {/if}
 
   {#if loading}
-    <Card.Root class="border border-border bg-card text-card-foreground rounded-xl p-8">
-      <Card.Content>
-        <p class="text-muted-foreground">Loading…</p>
-      </Card.Content>
-    </Card.Root>
-  {:else}
-    {#if error}
-      <div class="mb-4 p-4 rounded-lg bg-destructive/10 text-destructive text-sm">{error}</div>
+    <div class="py-12 text-center text-muted-foreground">Loading…</div>
+  {:else if view === 'sets'}
+    <!-- Sets list -->
+    <ul class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {#each sets as s}
+        <li>
+          <button
+            type="button"
+            class="w-full text-left p-4 rounded-xl border border-border bg-card hover:bg-muted/50 transition-colors"
+            onclick={() => openSet(s)}
+          >
+            <span class="font-medium">{s.name}</span>
+            <span class="text-muted-foreground text-sm block mt-0.5">{s.slug}</span>
+          </button>
+        </li>
+      {/each}
+    </ul>
+    {#if sets.length === 0}
+      <div class="py-12 text-center text-muted-foreground rounded-xl border border-dashed border-border">
+        <p class="mb-4">No sets yet.</p>
+        <Button onclick={openCreateSet}>Create your first set</Button>
+      </div>
     {/if}
-    {#if success}
-      <div class="mb-4 p-4 rounded-lg bg-green-500/10 text-green-700 dark:text-green-400 text-sm">{success}</div>
-    {/if}
-
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <!-- Sets list -->
-      <Card.Root class="border border-border bg-card text-card-foreground rounded-xl overflow-hidden">
-        <Card.Header class="flex flex-row items-center justify-between pb-4 border-b border-border">
-          <Card.Title class="text-lg font-medium">Sets</Card.Title>
-          <Button variant="outline" size="sm" onclick={() => { showCreateSet = true; showAddCard = false; }}>New set</Button>
-        </Card.Header>
-        <Card.Content class="p-0">
-          <ul class="divide-y divide-border">
-            {#each sets as s}
-              <li>
-                <button
-                  type="button"
-                  class="w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors {selectedSet?.id === s.id ? 'bg-muted' : ''}"
-                  onclick={() => selectSet(s)}
-                >
-                  <span class="font-medium">{s.name}</span>
-                  <span class="text-muted-foreground text-sm block">{s.slug}</span>
-                </button>
-              </li>
-            {/each}
-          </ul>
-          {#if sets.length === 0}
-            <p class="p-6 text-center text-muted-foreground text-sm">No sets yet. Create one to get started.</p>
-          {/if}
-        </Card.Content>
-      </Card.Root>
-
-      <!-- Create set form -->
-      {#if showCreateSet}
-        <Card.Root class="border border-border bg-card text-card-foreground rounded-xl p-6">
-          <Card.Header class="pb-4">
-            <Card.Title class="text-lg font-medium">Create set</Card.Title>
-            <Card.Description class="text-muted-foreground text-sm">Name, slug (URL-friendly), and description.</Card.Description>
-          </Card.Header>
-          <Card.Content class="space-y-4">
-            <div>
-              <label for="set-name" class="block text-sm font-medium mb-1">Name</label>
-              <input id="set-name" type="text" bind:value={newSetName} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="e.g. Genesis" />
-            </div>
-            <div>
-              <label for="set-slug" class="block text-sm font-medium mb-1">Slug</label>
-              <input id="set-slug" type="text" bind:value={newSetSlug} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="e.g. genesis (optional)" />
-            </div>
-            <div>
-              <label for="set-desc" class="block text-sm font-medium mb-1">Description</label>
-              <textarea id="set-desc" bind:value={newSetDescription} rows="2" class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Optional"></textarea>
-            </div>
-            <div class="flex gap-2">
-              <Button onclick={createSet} disabled={creatingSet || !newSetName.trim()}>
-                {creatingSet ? 'Creating…' : 'Create set'}
-              </Button>
-              <Button variant="outline" onclick={() => { showCreateSet = false; }}>Cancel</Button>
-            </div>
-          </Card.Content>
-        </Card.Root>
-      {/if}
-
-      <!-- Cards in selected set + Add card -->
-      <div class="lg:col-span-2 space-y-6">
-        {#if selectedSet}
-          <Card.Root class="border border-border bg-card text-card-foreground rounded-xl overflow-hidden">
-            <Card.Header class="flex flex-row items-center justify-between pb-4 border-b border-border">
-              <Card.Title class="text-lg font-medium">Cards in “{selectedSet.name}”</Card.Title>
-              <Button
-                variant="outline"
-                size="sm"
-                onclick={() => { showAddCard = true; showCreateSet = false; setAddCardDefaults(); }}
-              >
-                Add card
-              </Button>
-            </Card.Header>
-            <Card.Content class="p-0">
-              <Table.Root>
-                <Table.Header>
-                  <Table.Row>
-                    <Table.Head>#</Table.Head>
-                    <Table.Head>Name</Table.Head>
-                    <Table.Head>Rarity</Table.Head>
-                    <Table.Head>Image</Table.Head>
-                  </Table.Row>
-                </Table.Header>
-                <Table.Body>
-                  {#each cards as c}
-                    <Table.Row>
-                      <Table.Cell class="font-mono text-sm">{c.number || '—'}</Table.Cell>
-                      <Table.Cell class="font-medium">{c.name}</Table.Cell>
-                      <Table.Cell class="text-sm">{c.rarity}</Table.Cell>
-                      <Table.Cell>
-                        {#if c.image_path}
-                          <img src={imageUrl(c.image_path)} alt={c.name} class="h-10 w-10 object-contain rounded border border-border" />
-                        {:else}
-                          <span class="text-muted-foreground text-sm">—</span>
-                        {/if}
-                      </Table.Cell>
-                    </Table.Row>
-                  {/each}
-                </Table.Body>
-              </Table.Root>
-              {#if cards.length === 0}
-                <p class="p-6 text-center text-muted-foreground text-sm">No cards in this set. Add one below.</p>
+  {:else if view === 'cards' && selectedSet}
+    <!-- Cards list with Preview -->
+    {#if cards.length === 0}
+      <div class="py-12 text-center text-muted-foreground rounded-xl border border-dashed border-border">
+        <p class="mb-4">No cards in this set.</p>
+        <Button onclick={openAddCard}>Add a card</Button>
+      </div>
+    {:else}
+      <ul class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        {#each cards as c}
+          <li class="flex flex-col rounded-xl border border-border bg-card overflow-hidden">
+            <div class="aspect-[0.718] w-full bg-muted/30 flex items-center justify-center shrink-0">
+              {#if c.image_path}
+                <img src={imageUrl(c.image_path)} alt={c.name} class="w-full h-full object-contain" />
+              {:else}
+                <span class="text-muted-foreground text-sm">No image</span>
               {/if}
-            </Card.Content>
-          </Card.Root>
+            </div>
+            <div class="p-3 flex flex-col gap-2 flex-1">
+              <span class="font-medium truncate">{c.name}</span>
+              <span class="text-muted-foreground text-xs capitalize">{c.rarity}</span>
+              <Button variant="outline" size="sm" class="w-full mt-auto" onclick={() => (previewCard = c)}>
+                Preview
+              </Button>
+            </div>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  {/if}
 
-          <!-- Add card form -->
-          {#if showAddCard}
-            <Card.Root class="border border-border bg-card text-card-foreground rounded-xl p-6">
-              <Card.Header class="pb-4">
-                <Card.Title class="text-lg font-medium">Add card</Card.Title>
-                <Card.Description class="text-muted-foreground text-sm">Upload a PNG and fill in fields.</Card.Description>
-              </Card.Header>
-              <Card.Content class="space-y-4">
-                <div>
-                  <label class="block text-sm font-medium mb-1">Image (PNG)</label>
-                  <div class="flex flex-wrap gap-2 items-center">
-                    <input
-                      id="card-image"
-                      type="file"
-                      accept=".png,image/png"
-                      class="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground"
-                      onchange={(e) => { setCardImageFile((e.target as HTMLInputElement).files?.[0] ?? null); showCamera = false; }}
-                    />
-                    <span class="text-muted-foreground text-sm">or</span>
-                    <Button type="button" variant="outline" size="sm" onclick={openTakePicture}>
-                      Take a picture
-                    </Button>
-                  </div>
-                  {#if showCamera}
-                    <div class="mt-3 p-3 rounded-lg border border-border bg-muted/30 space-y-2">
-                      <p class="text-sm text-muted-foreground">Allow camera access, then click Capture.</p>
-                      {#if cameraError}
-                        <p class="text-sm text-destructive">{cameraError}</p>
-                      {:else}
-                        <div class="relative inline-block rounded-lg overflow-hidden bg-black max-w-xs">
-                          <video
-                            bind:this={videoEl}
-                            autoplay
-                            playsinline
-                            muted
-                            class="block w-full max-h-48 object-cover"
-                          ></video>
-                        </div>
-                        <div class="flex gap-2">
-                          <Button type="button" size="sm" onclick={capturePhoto}>Capture</Button>
-                          <Button type="button" variant="outline" size="sm" onclick={() => { stopCamera(); showCamera = false; }}>Cancel</Button>
-                        </div>
-                      {/if}
-                    </div>
-                  {/if}
-                  {#if cardImageFile && !showCamera}
-                    <div class="mt-2 flex items-center gap-2">
-                      <img
-                        src={imagePreviewUrl}
-                        alt="Preview"
-                        class="h-16 w-16 object-contain rounded border border-border"
-                      />
-                      <span class="text-sm text-muted-foreground">{cardImageFile.name}</span>
-                      <Button type="button" variant="ghost" size="sm" onclick={() => { setCardImageFile(null); const i = document.getElementById('card-image') as HTMLInputElement; if (i) i.value = ''; }}>Clear</Button>
-                    </div>
-                  {/if}
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label for="card-name" class="block text-sm font-medium mb-1">Name *</label>
-                    <input id="card-name" type="text" bind:value={cardName} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Card name" />
-                  </div>
-                  <div>
-                    <label for="card-number" class="block text-sm font-medium mb-1">Number</label>
-                    <input id="card-number" type="text" bind:value={cardNumber} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="e.g. 001" />
-                  </div>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label for="card-rarity" class="block text-sm font-medium mb-1">Rarity</label>
-                    <select id="card-rarity" bind:value={cardRarity} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-                      <option value="common">common</option>
-                      <option value="uncommon">uncommon</option>
-                      <option value="rare">rare</option>
-                      <option value="legendary">legendary</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label for="card-set-name" class="block text-sm font-medium mb-1">Set name (display)</label>
-                    <input id="card-set-name" type="text" bind:value={cardSetName} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-                  </div>
-                </div>
-                <div>
-                  <label for="card-quote" class="block text-sm font-medium mb-1">Quote</label>
-                  <input id="card-quote" type="text" bind:value={cardQuote} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Optional" />
-                </div>
-                <div>
-                  <label for="card-artwork" class="block text-sm font-medium mb-1">Artwork (credit)</label>
-                  <input id="card-artwork" type="text" bind:value={cardArtwork} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Optional" />
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div>
-                    <label for="card-types" class="block text-sm font-medium mb-1">Types (comma)</label>
-                    <input id="card-types" type="text" bind:value={cardTypes} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-                  </div>
-                  <div>
-                    <label for="card-subtypes" class="block text-sm font-medium mb-1">Subtypes</label>
-                    <input id="card-subtypes" type="text" bind:value={cardSubtypes} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-                  </div>
-                  <div>
-                    <label for="card-supertype" class="block text-sm font-medium mb-1">Supertype</label>
-                    <input id="card-supertype" type="text" bind:value={cardSupertype} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-                  </div>
-                </div>
-                <div class="flex gap-2">
-                  <Button onclick={addCard} disabled={addingCard || !cardName.trim()}>
-                    {addingCard ? 'Adding…' : 'Add card'}
-                  </Button>
-                  <Button variant="outline" onclick={() => { showAddCard = false; showCamera = false; stopCamera(); }}>Cancel</Button>
-                </div>
-              </Card.Content>
-            </Card.Root>
-          {/if}
-        {:else}
-          <Card.Root class="border border-border bg-card text-card-foreground rounded-xl p-8">
-            <Card.Content>
-              <p class="text-muted-foreground">Select a set to view and add cards.</p>
-            </Card.Content>
-          </Card.Root>
-        {/if}
+  <!-- Modal: Create set -->
+  {#if showCreateSet}
+    <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="create-set-title">
+      <div class="absolute inset-0 bg-black/60" onclick={closeCreateSet}></div>
+      <div class="relative w-full max-w-md bg-card border border-border rounded-t-2xl sm:rounded-2xl shadow-xl p-6 max-h-[90vh] overflow-y-auto" onclick={(e) => e.stopPropagation()}>
+        <h2 id="create-set-title" class="text-lg font-semibold mb-1">Create set</h2>
+        <p class="text-muted-foreground text-sm mb-4">Slug is derived from the name.</p>
+        <div class="space-y-4">
+          <div>
+            <label for="set-name" class="block text-sm font-medium mb-1">Name</label>
+            <input id="set-name" type="text" bind:value={newSetName} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="e.g. Genesis" />
+          </div>
+          <div>
+            <label for="set-desc" class="block text-sm font-medium mb-1">Description (optional)</label>
+            <textarea id="set-desc" bind:value={newSetDescription} rows="2" class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Optional"></textarea>
+          </div>
+          <div class="flex gap-2 pt-2">
+            <Button onclick={createSet} disabled={creatingSet || !newSetName.trim()}>
+              {creatingSet ? 'Creating…' : 'Create'}
+            </Button>
+            <Button variant="outline" onclick={closeCreateSet}>Cancel</Button>
+          </div>
+        </div>
       </div>
     </div>
   {/if}
+
+  <!-- Modal: Add card (simplified) -->
+  {#if showAddCard && selectedSet}
+    <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="add-card-title">
+      <div class="absolute inset-0 bg-black/60" onclick={closeAddCard}></div>
+      <div class="relative w-full max-w-md bg-card border border-border rounded-t-2xl sm:rounded-2xl shadow-xl p-6 max-h-[90vh] overflow-y-auto" onclick={(e) => e.stopPropagation()}>
+        <h2 id="add-card-title" class="text-lg font-semibold mb-4">Add card</h2>
+        <div class="space-y-4">
+          <div>
+            <label for="card-name" class="block text-sm font-medium mb-1">Name *</label>
+            <input id="card-name" type="text" bind:value={cardName} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Card name" />
+          </div>
+          <div>
+            <label for="card-rarity" class="block text-sm font-medium mb-1">Rarity</label>
+            <select id="card-rarity" bind:value={cardRarity} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+              <option value="common">common</option>
+              <option value="uncommon">uncommon</option>
+              <option value="rare">rare</option>
+              <option value="legendary">legendary</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Set</label>
+            <input type="text" value={selectedSet.name} disabled class="w-full rounded-md border border-input bg-muted/50 px-3 py-2 text-sm text-muted-foreground cursor-not-allowed" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Image (PNG)</label>
+            <div class="flex flex-wrap gap-2 items-center">
+              <input
+                id="card-image"
+                type="file"
+                accept=".png,image/png"
+                class="text-sm file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground"
+                onchange={(e) => { setCardImageFile((e.target as HTMLInputElement).files?.[0] ?? null); showCamera = false; }}
+              />
+              <span class="text-muted-foreground text-xs">or</span>
+              <Button type="button" variant="outline" size="sm" onclick={openTakePicture}>Take picture</Button>
+            </div>
+            {#if showCamera}
+              <div class="mt-3 p-3 rounded-lg border border-border bg-muted/30 space-y-2">
+                {#if cameraError}
+                  <p class="text-sm text-destructive">{cameraError}</p>
+                {:else}
+                  <div class="rounded-lg overflow-hidden bg-black max-w-full min-h-[180px]">
+                    <video bind:this={videoEl} autoplay playsinline muted class="block w-full min-h-[180px] max-h-40 object-cover"></video>
+                  </div>
+                  <div class="flex gap-2">
+                    <Button type="button" size="sm" onclick={capturePhoto}>Capture</Button>
+                    <Button type="button" variant="outline" size="sm" onclick={() => { stopCamera(); showCamera = false; }}>Cancel</Button>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+            {#if cardImageFile && !showCamera}
+              <div class="mt-2 flex items-center gap-2">
+                <img src={imagePreviewUrl} alt="Preview" class="h-14 w-14 object-contain rounded border border-border" />
+                <span class="text-sm text-muted-foreground truncate flex-1">{cardImageFile.name}</span>
+                <Button type="button" variant="ghost" size="sm" onclick={() => { setCardImageFile(null); (document.getElementById('card-image') as HTMLInputElement).value = ''; }}>Clear</Button>
+              </div>
+            {/if}
+          </div>
+          <div class="flex gap-2 pt-2">
+            <Button onclick={addCard} disabled={addingCard || !cardName.trim()}>
+              {addingCard ? 'Adding…' : 'Add card'}
+            </Button>
+            <Button variant="outline" onclick={closeAddCard}>Cancel</Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Modal: Preview (holographic card) -->
+  {#if previewCard}
+    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70" role="dialog" aria-modal="true" aria-label="Card preview" onclick={() => (previewCard = null)}>
+      <div class="max-w-[min(280px,95vw)]" onclick={(e) => e.stopPropagation()}>
+        <TradingCard
+          id={previewCard.id}
+          name={previewCard.name}
+          number={previewCard.number}
+          set={previewCard.set_name}
+          types={previewCard.types?.length ? previewCard.types : ['TradingCard']}
+          subtypes={previewCard.subtypes || 'trading-cards'}
+          supertype={previewCard.supertype || 'trading-card'}
+          rarity={previewCard.rarity}
+          img={previewCard.image_path ? imageUrl(previewCard.image_path) : ''}
+        />
+      </div>
+      <button
+        type="button"
+        class="absolute top-4 right-4 p-2 rounded-full bg-black/50 text-white hover:bg-black/70"
+        aria-label="Close preview"
+        onclick={() => (previewCard = null)}
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+  {/if}
 </main>
+
+<style>
+  .manage-cards-page {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+</style>

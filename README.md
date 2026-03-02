@@ -35,6 +35,7 @@ Then open **http://localhost:5173**, click “Log in with Discord”, and after 
 
 - **Backend**: FastAPI (Discord OIDC, session cookie, **Discord bot** slash commands, ACA-Py multitenancy client, PostgreSQL user→tenant mapping)
 - **Frontend**: SvelteKit (landing, login redirect, `/wallet` with card grid), PWA-ready (vite-plugin-pwa). UI: [shadcn-svelte](https://www.shadcn-svelte.com/) (Tailwind) for layout and chrome; holographic cards are a separate module.
+- **PWA**: Web app manifest is in `frontend/vite.config.js` (name, short_name, icons, theme_color, display, start_url, scope). For full installability (e.g. Chrome “Add to Home Screen”), add `frontend/static/pwa-192.png` (192×192) and `frontend/static/pwa-512.png` (512×512) and reference them in the manifest `icons` array.
 - **Cards**: Holographic collectible cards (`Card.svelte` + `cards.css` from pokemon-cards-css / brutality-cards); layout uses shadcn Card/Button/Skeleton.
 
 ## Quick start

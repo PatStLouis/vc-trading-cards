@@ -16,7 +16,13 @@ export default defineConfig({
         theme_color: '#0a0a0a',
         background_color: '#0a0a0a',
         display: 'standalone',
-        start_url: '/'
+        start_url: '/',
+        scope: '/',
+        id: '/',
+        // Add pwa-192.png and pwa-512.png to static/ for installability (Chrome/Android).
+        icons: [
+          { src: '/card-back.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }
+        ]
       },
       workbox: { globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'] }
     })

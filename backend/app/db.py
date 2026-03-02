@@ -1,4 +1,5 @@
 """Async PostgreSQL store for discord_sub -> tenant (wallet_id, token) mapping."""
+import re
 import asyncpg
 from datetime import timezone
 from config import get_settings
@@ -184,9 +185,17 @@ async def list_card_sets() -> list[dict]:
     ]
 
 
+def _slug_from_name(name: str) -> str:
+    """Derive URL-friendly slug from name: lowercase, spaces to dashes, strip non-alphanumeric."""
+    s = (name or "").strip().lower()
+    s = re.sub(r"[^a-z0-9\s-]", "", s)
+    s = re.sub(r"[-\s]+", "-", s).strip("-")
+    return s or "set"
+
+
 async def create_card_set(name: str, slug: str, description: str = "") -> dict | None:
     pool = _get_pool()
-    effective_slug = (slug or "").strip() or name.strip().lower().replace(" ", "-")
+    effective_slug = (slug or "").strip() or _slug_from_name(name)
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
