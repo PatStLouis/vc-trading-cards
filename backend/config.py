@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # Admin: comma-separated Discord user IDs allowed to access /admin
     admin_discord_ids: str = os.getenv("ADMIN_DISCORD_IDS", "")
 
+    # Uploads: directory for card images (relative to cwd or absolute). Served at /uploads.
+    upload_dir: str = os.getenv("UPLOAD_DIR", "uploads")
+
     @property
     def discord_authorize_url(self) -> str:
         return "https://discord.com/api/oauth2/authorize"

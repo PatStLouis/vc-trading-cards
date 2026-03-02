@@ -61,6 +61,7 @@
         </Card.Description>
       </div>
       <div class="flex gap-2">
+        <Button variant="outline" size="sm" href="/admin/manage-cards">Manage Cards</Button>
         <Button variant="outline" size="sm" href="/wallet">Wallet</Button>
         <Button variant="outline" size="sm" onclick={logout}>Log out</Button>
       </div>

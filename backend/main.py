@@ -1,7 +1,10 @@
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 
 from config import get_settings
 from app.db import init_db, close_db
@@ -13,6 +16,7 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    os.makedirs(settings.upload_dir, exist_ok=True)
     try:
         yield
     finally:
@@ -37,6 +41,34 @@ app.include_router(auth.router)
 app.include_router(wallet.router)
 app.include_router(admin.router)
 app.include_router(discord_bot.router)
+
+app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
+
+
+def _did_web_id_from_url(url: str) -> str:
+    """Build did:web identifier from backend URL (e.g. https://api.example.com -> did:web:api.example.com)."""
+    from urllib.parse import urlparse
+    p = urlparse(url)
+    host = (p.hostname or "localhost").lower()
+    port = p.port
+    if port and port not in (80, 443):
+        return f"did:web:{host}:{port}"
+    return f"did:web:{host}"
+
+
+@app.get("/.well-known/did.json", response_class=JSONResponse)
+async def well_known_did():
+    """Serve the DID document at the root domain (did:web)."""
+    did_id = _did_web_id_from_url(settings.backend_url)
+    doc = {
+        "@context": ["https://www.w3.org/ns/did/v1"],
+        "id": did_id,
+    }
+    return JSONResponse(
+        content=doc,
+        media_type="application/did+ld+json",
+        headers={"Cache-Control": "max-age=300"},
+    )
 
 
 @app.get("/")

@@ -1,8 +1,24 @@
-"""Admin dashboard API: stats and user list. Requires user to be in ADMIN_DISCORD_IDS."""
-from fastapi import APIRouter, Depends
+"""Admin dashboard API: stats, user list, card sets and cards. Requires user to be in ADMIN_DISCORD_IDS."""
+import os
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form
 from app.dependencies import get_current_admin
-from app.db import list_users, count_users
+from app.db import (
+    list_users,
+    count_users,
+    list_card_sets,
+    create_card_set,
+    get_card_set,
+    update_card_set,
+    delete_card_set,
+    list_cards,
+    create_card,
+    get_card,
+    update_card,
+    delete_card,
+)
+from config import get_settings
 
+settings = get_settings()
 router = APIRouter(tags=["Admin"], prefix="/api/admin")
 
 
@@ -20,3 +36,247 @@ async def admin_users(_admin: dict = Depends(get_current_admin), limit: int = 50
         limit = 500
     users = await list_users(limit=limit)
     return {"users": users}
+
+
+# ---- Card sets ----
+
+@router.get("/sets")
+async def admin_list_sets(_admin: dict = Depends(get_current_admin)):
+    """List all card sets."""
+    sets = await list_card_sets()
+    return {"sets": sets}
+
+
+@router.post("/sets")
+async def admin_create_set(
+    _admin: dict = Depends(get_current_admin),
+    name: str = Form(...),
+    slug: str = Form(""),
+    description: str = Form(""),
+):
+    """Create a new card set."""
+    try:
+        out = await create_card_set(name=name, slug=(slug or "").strip(), description=description)
+    except Exception as e:
+        if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+            raise HTTPException(status_code=400, detail="A set with this slug already exists")
+        raise
+    if not out:
+        raise HTTPException(status_code=500, detail="Failed to create set")
+    return out
+
+
+@router.get("/sets/{set_id}")
+async def admin_get_set(set_id: str, _admin: dict = Depends(get_current_admin)):
+    """Get a single card set."""
+    s = await get_card_set(set_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Set not found")
+    return s
+
+
+@router.put("/sets/{set_id}")
+async def admin_update_set(
+    set_id: str,
+    _admin: dict = Depends(get_current_admin),
+    name: str | None = Form(None),
+    slug: str | None = Form(None),
+    description: str | None = Form(None),
+):
+    """Update a card set."""
+    s = await get_card_set(set_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Set not found")
+    try:
+        out = await update_card_set(set_id, name=name, slug=slug, description=description)
+    except Exception as e:
+        if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+            raise HTTPException(status_code=400, detail="A set with this slug already exists")
+        raise
+    return out or s
+
+
+@router.delete("/sets/{set_id}")
+async def admin_delete_set(set_id: str, _admin: dict = Depends(get_current_admin)):
+    """Delete a card set (and its cards)."""
+    s = await get_card_set(set_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Set not found")
+    ok = await delete_card_set(set_id)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to delete set")
+    return {"deleted": True}
+
+
+# ---- Cards ----
+
+def _save_card_image(set_id: str, card_id: str, file: UploadFile) -> str:
+    """Save uploaded PNG; return path relative to upload_dir (e.g. cards/{set_id}/{card_id}.png)."""
+    if not file.filename or not file.filename.lower().endswith(".png"):
+        raise HTTPException(status_code=400, detail="Only PNG files are allowed")
+    base = os.path.abspath(settings.upload_dir)
+    subdir = os.path.join("cards", set_id)
+    dest_dir = os.path.join(base, subdir)
+    os.makedirs(dest_dir, exist_ok=True)
+    ext = os.path.splitext(file.filename)[1] or ".png"
+    name = f"{card_id}{ext}"
+    path = os.path.join(dest_dir, name)
+    rel = os.path.join(subdir, name).replace("\\", "/")
+    return rel
+
+
+@router.get("/sets/{set_id}/cards")
+async def admin_list_cards(set_id: str, _admin: dict = Depends(get_current_admin)):
+    """List cards in a set."""
+    s = await get_card_set(set_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Set not found")
+    cards = await list_cards(set_id)
+    return {"cards": cards}
+
+
+@router.post("/sets/{set_id}/cards")
+async def admin_create_card(
+    set_id: str,
+    _admin: dict = Depends(get_current_admin),
+    name: str = Form(...),
+    number: str = Form(""),
+    rarity: str = Form("common"),
+    set_name: str = Form(""),
+    quote: str = Form(""),
+    artwork: str = Form(""),
+    image: UploadFile | None = File(None),
+    types: str = Form("TradingCard"),
+    subtypes: str = Form("trading-cards"),
+    supertype: str = Form("trading-card"),
+):
+    """Add a card to a set. Optionally upload a PNG image."""
+    s = await get_card_set(set_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Set not found")
+    image_path = ""
+    if image and image.filename:
+        card = await create_card(
+            set_id=set_id,
+            name=name,
+            number=number,
+            rarity=rarity,
+            set_name=set_name or s["name"],
+            quote=quote,
+            artwork=artwork,
+            image_path="",
+            types=[t.strip() for t in types.split(",") if t.strip()] if types else None,
+            subtypes=subtypes,
+            supertype=supertype,
+        )
+        if not card:
+            raise HTTPException(status_code=500, detail="Failed to create card")
+        try:
+            rel = _save_card_image(set_id, card["id"], image)
+            contents = await image.read()
+            base = os.path.abspath(settings.upload_dir)
+            full = os.path.join(base, rel)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "wb") as f:
+                f.write(contents)
+        except HTTPException:
+            raise
+        except Exception as e:
+            await delete_card(card["id"])
+            raise HTTPException(status_code=400, detail=f"Failed to save image: {e}")
+        card = await update_card(card["id"], image_path=rel)
+        return card or await get_card(card["id"])
+    card = await create_card(
+        set_id=set_id,
+        name=name,
+        number=number,
+        rarity=rarity,
+        set_name=set_name or s["name"],
+        quote=quote,
+        artwork=artwork,
+        image_path=image_path,
+        types=[t.strip() for t in types.split(",") if t.strip()] if types else None,
+        subtypes=subtypes,
+        supertype=supertype,
+    )
+    if not card:
+        raise HTTPException(status_code=500, detail="Failed to create card")
+    return card
+
+
+@router.get("/cards/{card_id}")
+async def admin_get_card(card_id: str, _admin: dict = Depends(get_current_admin)):
+    """Get a single card."""
+    c = await get_card(card_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="Card not found")
+    return c
+
+
+@router.put("/cards/{card_id}")
+async def admin_update_card(
+    card_id: str,
+    _admin: dict = Depends(get_current_admin),
+    name: str | None = Form(None),
+    number: str | None = Form(None),
+    rarity: str | None = Form(None),
+    set_name: str | None = Form(None),
+    quote: str | None = Form(None),
+    artwork: str | None = Form(None),
+    image: UploadFile | None = File(None),
+    types: str | None = Form(None),
+    subtypes: str | None = Form(None),
+    supertype: str | None = Form(None),
+):
+    """Update a card. Optionally replace image with new PNG."""
+    c = await get_card(card_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="Card not found")
+    image_path = c.get("image_path") or ""
+    if image and image.filename and image.filename.lower().endswith(".png"):
+        try:
+            rel = _save_card_image(c["set_id"], card_id, image)
+            contents = await image.read()
+            base = os.path.abspath(settings.upload_dir)
+            full = os.path.join(base, rel)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "wb") as f:
+                f.write(contents)
+            image_path = rel
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to save image: {e}")
+    types_list = None
+    if types is not None:
+        types_list = [t.strip() for t in types.split(",") if t.strip()]
+    out = await update_card(
+        card_id,
+        name=name,
+        number=number,
+        rarity=rarity,
+        set_name=set_name,
+        quote=quote,
+        artwork=artwork,
+        image_path=image_path if (image and image.filename) else None,
+        types=types_list,
+        subtypes=subtypes,
+        supertype=supertype,
+    )
+    if image and image.filename and image_path:
+        out = await get_card(card_id)
+        if out:
+            out["image_path"] = image_path
+    return out or await get_card(card_id)
+
+
+@router.delete("/cards/{card_id}")
+async def admin_delete_card(card_id: str, _admin: dict = Depends(get_current_admin)):
+    """Delete a card."""
+    c = await get_card(card_id)
+    if not c:
+        raise HTTPException(status_code=404, detail="Card not found")
+    ok = await delete_card(card_id)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to delete card")
+    return {"deleted": True}

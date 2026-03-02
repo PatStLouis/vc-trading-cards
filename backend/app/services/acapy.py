@@ -57,16 +57,22 @@ async def get_tenant_token(wallet_id: str, wallet_key: str | None = None) -> str
 
 
 async def list_credentials(tenant_token: str | None) -> list:
-    """List credentials in the tenant wallet. Returns list of credential records."""
+    """List W3C credentials in the tenant wallet. POST /credentials/w3c with empty body.
+    Returns list of credential records (e.g. with credential_id and credential or raw W3C creds)."""
     if not _settings.acapy_admin_url.strip() or not tenant_token:
         return []
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            r = await client.get(
-                f"{_settings.acapy_admin_url.rstrip('/')}/credentials",
+            r = await client.post(
+                f"{_settings.acapy_admin_url.rstrip('/')}/credentials/w3c",
+                json={},
                 headers={"Authorization": f"Bearer {tenant_token}"},
             )
             r.raise_for_status()
-            return r.json().get("results", [])
+            data = r.json()
+            # Accept { "results": [...] } or a direct list
+            if isinstance(data, list):
+                return data
+            return data.get("results", [])
         except Exception:
             return []
