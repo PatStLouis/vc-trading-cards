@@ -28,6 +28,13 @@ async def discord_login(request: Request):
     return RedirectResponse(url=url, status_code=302)
 
 
+@router.get("/redirect-uri")
+async def auth_redirect_uri():
+    """Return the redirect_uri this backend sends to Discord (for verification). Must match Discord Developer Portal → OAuth2 → Redirects."""
+    redirect_uri = settings.discord_redirect_uri or f"{settings.backend_url.rstrip('/')}/auth/callback"
+    return {"redirect_uri": redirect_uri}
+
+
 @router.get("/callback")
 async def discord_callback(
     code: str | None = None,

@@ -73,9 +73,9 @@ Open http://localhost:5173. Log in with Discord (redirects to backend `/auth/dis
 ### Environment (backend)
 
 - `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` – Discord OAuth2 app
-- `DISCORD_REDIRECT_URI` – optional; defaults to `{BACKEND_URL}/auth/callback`
-- `BACKEND_URL` – public URL of the backend (e.g. `http://localhost:8000`), used for Discord redirect URI and cookie `secure` flag
-- `FRONTEND_URL` – frontend origin (e.g. `http://localhost:5173`) for CORS and post-login redirect
+- `DISCORD_REDIRECT_URI` – optional; defaults to `{BACKEND_URL}/auth/callback`. Set this explicitly (e.g. `https://your-backend.railway.app/auth/callback`) to avoid using the wrong URL when `BACKEND_URL` is misconfigured. You can verify what the backend sends by opening `GET {BACKEND_URL}/auth/redirect-uri` (returns `{"redirect_uri": "..."}`).
+- `BACKEND_URL` – **Backend’s own** public URL (e.g. `https://vc-trading-cards-production.up.railway.app`). Used for the Discord OAuth2 redirect URI and cookie `secure` flag. Do **not** set this to the frontend URL or Discord will get the wrong redirect_uri and auth will fail.
+- `FRONTEND_URL` – frontend origin (e.g. `http://localhost:5173` or your frontend Railway URL) for CORS and post-login redirect to `/wallet`.
 - `SECRET_KEY` – used to sign session cookie
 - `DATABASE_URL` – PostgreSQL URL (e.g. `postgresql://user:password@localhost:5432/vc_cards`). Table `user_tenant` is created on startup.
 - `ACAPY_ADMIN_URL`, `ACAPY_ADMIN_API_KEY` – optional; if set, backend creates a tenant per user and lists credentials from ACA-Py. If not set, wallet still works with an empty card list.
