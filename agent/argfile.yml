@@ -1,25 +1,45 @@
 # ACA-Py multitenancy config for VC Trading Cards
+# Aligned with digicred-crms multitenant pattern (multitenant_provider plugin).
 # Used with: aca-start --arg-file /app/argfile.yml
-# See https://aca-py.org/latest/features/Multitenancy/
 
-# Admin API (required for backend to create tenants and list credentials)
+# Admin API (backend creates tenants and lists credentials)
 admin:
   - 0.0.0.0
   - 8031
 
-# Dev only: no API key required. For production use admin-api-key and set ACAPY_ADMIN_API_KEY in backend.
+# Dev: no API key. For production set admin-insecure-mode: false and admin-api-key / ACAPY_ADMIN_API_KEY.
 admin-insecure-mode: true
 
-# Multitenancy: one wallet per user
+# Transport (required by ACA-Py; admin-only use still needs at least one inbound)
+inbound-transport:
+  - [http, 0.0.0.0, 8032]
+outbound-transport: [http]
+
+# Multitenant provider plugin (see digicred-crms plugins/docker/default.yml)
+plugin:
+  - multitenant_provider.v1_0
+
+plugin-config-value:
+  - multitenant_provider.manager.class_name="multitenant_provider.v1_0.manager.AskarMultitokenMultitenantManager"
+  - multitenant_provider.manager.always_check_provided_wallet_key=true
+  - multitenant_provider.errors.on_unneeded_wallet_key=false
+  - multitenant_provider.token_expiry.units=days
+  - multitenant_provider.token_expiry.amount=1
+
+# Multitenancy
 multitenant: true
 multitenant-admin: true
-
-# Required when multitenant is true. Override via env ACAPY_JWT_SECRET in docker run.
+# Override via env ACAPY_JWT_SECRET in docker run
 jwt-secret: change-me-use-env-in-production
 
-# No ledger / public DID needed for local wallet-only use
+# Wallet (base wallet for agent; sub-wallets created per tenant)
 wallet-type: askar
+wallet-name: vc-cards-base-wallet
+wallet-key: change-me-in-production
 wallet-local-did: true
+auto-provision: true
 
-# Log level
+# No ledger (wallet-only; no public DID / genesis)
+no-ledger: true
+
 log-level: info

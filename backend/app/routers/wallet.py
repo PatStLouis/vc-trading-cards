@@ -8,11 +8,13 @@ router = APIRouter(tags=["Wallet"], prefix="/api")
 
 @router.get("/me")
 async def me(user: dict = Depends(get_current_user)):
-    """Return current user info from session."""
+    """Return current user info from session. Includes is_admin when user is in ADMIN_DISCORD_IDS."""
+    from app.dependencies import is_admin
     return {
         "sub": user.get("sub"),
         "username": user.get("username"),
         "wallet_id": user.get("wallet_id"),
+        "is_admin": is_admin(user),
     }
 
 

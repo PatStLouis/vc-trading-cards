@@ -8,6 +8,10 @@ from config import get_settings
 settings = get_settings()
 
 
+def _admin_ids_set() -> set[str]:
+    return {s.strip() for s in (settings.admin_discord_ids or "").split(",") if s.strip()}
+
+
 async def get_current_user(request: Request) -> dict:
     cookie = request.cookies.get(settings.session_cookie_name)
     if not cookie:
@@ -16,6 +20,18 @@ async def get_current_user(request: Request) -> dict:
     if not data:
         raise HTTPException(status_code=401, detail="Invalid session")
     return data
+
+
+def is_admin(user: dict) -> bool:
+    sub = (user.get("sub") or "").strip()
+    return sub in _admin_ids_set()
+
+
+async def get_current_admin(user: dict = Depends(get_current_user)) -> dict:
+    """Require current user to be in ADMIN_DISCORD_IDS."""
+    if not is_admin(user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
 
 
 async def get_tenant_token_for_request(user: dict = Depends(get_current_user)) -> str | None:

@@ -1,0 +1,63 @@
+# Run backend + Postgres (and optionally agent) on a shared network so backend can reach the DB.
+# From repo root:
+#   docker compose up -d postgres
+#   docker compose up -d agent    # optional
+#   docker compose up -d backend
+# Or: docker compose up -d   (all services)
+#
+# Backend needs DISCORD_* and SECRET_KEY; copy backend/.env.example to backend/.env and set values.
+# Override env for backend: docker compose run -e DATABASE_URL=... backend  (or use env_file)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: vc_cards
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vc_cards
+      ACAPY_ADMIN_URL: http://agent:8031
+      BACKEND_URL: http://localhost:8000
+      FRONTEND_URL: http://localhost:5173
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Optional: also wait for agent (remove if you don't run agent)
+    # depends_on:
+    #   - agent
+
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    ports:
+      - "8031:8031"
+      - "8032:8032"
+    environment:
+      ACAPY_JWT_SECRET: ${ACAPY_JWT_SECRET:-insecure-jwt-secret-min-32-chars}
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend

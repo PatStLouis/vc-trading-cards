@@ -79,3 +79,35 @@ async def set_tenant_for_user(
             wallet_id,
             tenant_token or "",
         )
+
+
+async def list_users(limit: int = 500) -> list[dict]:
+    """List all user_tenant rows for admin dashboard."""
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT discord_sub, discord_username, wallet_id, created_at, updated_at
+            FROM user_tenant
+            ORDER BY created_at DESC
+            LIMIT $1
+            """,
+            limit,
+        )
+    return [
+        {
+            "discord_sub": r["discord_sub"],
+            "discord_username": r["discord_username"] or "",
+            "wallet_id": r["wallet_id"],
+            "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+            "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+        }
+        for r in rows
+    ]
+
+
+async def count_users() -> int:
+    """Total number of registered users."""
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        return (await conn.fetchval("SELECT COUNT(*) FROM user_tenant")) or 0

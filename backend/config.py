@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # DB for user -> tenant mapping (PostgreSQL)
     database_url: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/vc_cards")
 
+    # Admin: comma-separated Discord user IDs allowed to access /admin
+    admin_discord_ids: str = os.getenv("ADMIN_DISCORD_IDS", "")
+
     @property
     def discord_authorize_url(self) -> str:
         return "https://discord.com/api/oauth2/authorize"

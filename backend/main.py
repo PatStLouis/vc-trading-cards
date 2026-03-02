@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
 from app.db import init_db, close_db
-from app.routers import auth, wallet
+from app.routers import auth, wallet, admin
 
 settings = get_settings()
 
@@ -35,6 +35,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(wallet.router)
+app.include_router(admin.router)
 
 
 @app.get("/")

@@ -1,0 +1,9 @@
+node_modules
+.git
+.svelte-kit
+build
+.env
+.env.*
+*.md
+*.test.ts
+*.spec.ts

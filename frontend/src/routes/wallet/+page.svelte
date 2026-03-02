@@ -1,13 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
-  import Card from '$lib/components/Card.svelte';
+  import { Button } from '$lib/components/ui/button';
+  import * as Card from '$lib/components/ui/card';
+  import { Skeleton } from '$lib/components/ui/skeleton';
+  import TradingCard from '$lib/components/Card.svelte';
   import { activeCard } from '$lib/stores/activeCard';
 
-  let user: { username: string; wallet_id: string } | null = null;
-  let cards: Array<Record<string, unknown>> = [];
-  let loading = true;
-  let error = '';
+  let user: { username: string; wallet_id: string; is_admin?: boolean } | null = $state(null);
+  let cards: Array<Record<string, unknown>> = $state([]);
+  let loading = $state(true);
+  let error = $state('');
 
   const API = typeof window !== 'undefined' ? '' : (import.meta.env.VITE_API_URL || '');
 
@@ -57,25 +60,55 @@
   }
 </script>
 
-<main class="wallet-page">
-  <header class="wallet-header">
-    <h1>My collection</h1>
-    {#if user}
-      <p class="user">@{user.username} · <span class="wallet-id">{user.wallet_id?.slice(0, 12)}…</span></p>
-      <button class="btn btn-outline" onclick={logout}>Log out</button>
-    {/if}
-  </header>
+<main class="wallet-page py-6 px-4">
+  <Card.Root class="border border-border bg-card text-card-foreground rounded-xl mb-8">
+    <Card.Header class="flex flex-row flex-wrap items-center justify-between gap-4 pb-4 border-b border-border">
+      <div>
+        <Card.Title class="text-xl font-semibold">My collection</Card.Title>
+        {#if user}
+          <Card.Description class="text-muted-foreground text-sm mt-1">
+            @{user.username}
+            <span class="font-mono text-xs opacity-80"> · {user.wallet_id?.slice(0, 12)}…</span>
+          </Card.Description>
+        {/if}
+      </div>
+      {#if user}
+        {#if user.is_admin}
+          <Button variant="outline" size="sm" href="/admin">Admin</Button>
+        {/if}
+        <Button variant="outline" size="sm" onclick={logout}>Log out</Button>
+      {/if}
+    </Card.Header>
+  </Card.Root>
 
   {#if loading}
-    <p class="loading">Loading your cards…</p>
+    <div class="space-y-4">
+      <Skeleton class="h-8 w-48" />
+      <div class="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-6">
+        {#each Array(6) as _}
+          <Skeleton class="aspect-[0.718] w-full rounded-[4.55%_/_3.5%] max-w-[280px] mx-auto" />
+        {/each}
+      </div>
+    </div>
   {:else if error}
-    <p class="error">{error}</p>
+    <Card.Root class="border border-destructive/50 bg-card text-card-foreground rounded-xl p-6">
+      <Card.Content>
+        <p class="text-destructive">{error}</p>
+      </Card.Content>
+    </Card.Root>
   {:else if cards.length === 0}
-    <p class="empty">No cards in your wallet yet. Credentials issued to this wallet will appear here.</p>
+    <Card.Root class="border border-border bg-card text-card-foreground rounded-xl p-8 text-center">
+      <Card.Header>
+        <Card.Title class="text-lg font-medium">No cards yet</Card.Title>
+        <Card.Description class="text-muted-foreground text-sm mt-2">
+          Credentials issued to this wallet will appear here as holographic cards.
+        </Card.Description>
+      </Card.Header>
+    </Card.Root>
   {:else}
-    <section class="card-grid">
+    <section class="card-grid grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-8 py-4" aria-label="Trading cards">
       {#each cards as card (card.id)}
-        <Card
+        <TradingCard
           id={card.id}
           name={String(card.name ?? 'Card')}
           number={String(card.number ?? '')}
@@ -90,56 +123,3 @@
     </section>
   {/if}
 </main>
-
-<style>
-  .wallet-page {
-    padding: 2rem 1rem;
-  }
-  .wallet-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 1rem;
-    margin-bottom: 2rem;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-    padding-bottom: 1rem;
-  }
-  .wallet-header h1 {
-    margin: 0;
-    font-size: 1.5rem;
-  }
-  .user {
-    margin: 0;
-    opacity: 0.9;
-    font-size: 0.95rem;
-  }
-  .wallet-id {
-    font-family: monospace;
-    font-size: 0.85em;
-  }
-  .btn-outline {
-    margin-left: auto;
-    padding: 0.5rem 1rem;
-    background: transparent;
-    border: 1px solid rgba(255,255,255,0.3);
-    color: var(--text-light);
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.9rem;
-  }
-  .btn-outline:hover {
-    background: rgba(255,255,255,0.05);
-  }
-  .loading, .error, .empty {
-    text-align: center;
-    padding: 2rem;
-    opacity: 0.9;
-  }
-  .error { color: #f44336; }
-  .card-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 2rem;
-    padding: 1rem 0;
-  }
-</style>

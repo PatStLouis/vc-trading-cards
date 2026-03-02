@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { goto } from '$app/navigation';
+  import { Button } from '$lib/components/ui/button';
+  import * as Card from '$lib/components/ui/card';
 
   let error = $state('');
 
@@ -14,71 +15,28 @@
   }
 </script>
 
-<main class="landing">
-  <header class="hero">
-    <h1>VC Trading Cards</h1>
-    <p class="tagline">Your verifiable credential trading cards in one place. Log in with Discord to browse your wallet.</p>
-    {#if error}
-      <p class="error">Login failed. Please try again.</p>
-    {/if}
-    <button class="btn btn-primary" onclick={login}>Log in with Discord</button>
-  </header>
-  <footer class="landing-footer">
-    <p>Uses ACA-Py multitenancy. Each user gets their own wallet.</p>
-  </footer>
+<main class="min-h-screen flex flex-col items-center justify-center text-center px-6 py-12">
+  <Card.Root class="w-full max-w-lg border border-border bg-card text-card-foreground rounded-xl shadow-lg p-8">
+    <Card.Header class="space-y-2 text-center pb-4">
+      <Card.Title class="text-2xl font-bold tracking-tight">VC Trading Cards</Card.Title>
+      <Card.Description class="text-muted-foreground text-sm leading-relaxed">
+        Your verifiable credential trading cards in one place. Log in with Discord to browse your wallet.
+      </Card.Description>
+    </Card.Header>
+    <Card.Content class="space-y-4">
+      {#if error}
+        <p class="text-destructive text-sm">Login failed. Please try again.</p>
+      {/if}
+      <Button
+        class="w-full"
+        size="lg"
+        onclick={login}
+      >
+        Log in with Discord
+      </Button>
+    </Card.Content>
+    <Card.Footer class="pt-4 border-t border-border text-center">
+      <p class="text-xs text-muted-foreground">Uses ACA-Py multitenancy. Each user gets their own wallet.</p>
+    </Card.Footer>
+  </Card.Root>
 </main>
-
-<style>
-  .landing {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 2rem;
-  }
-  .hero h1 {
-    font-size: clamp(2rem, 5vw, 3rem);
-    margin: 0 0 1rem;
-    font-weight: 700;
-  }
-  .tagline {
-    font-size: 1.1rem;
-    color: var(--text-light);
-    opacity: 0.9;
-    max-width: 480px;
-    margin: 0 auto 1.5rem;
-    line-height: 1.5;
-  }
-  .error {
-    color: #f44336;
-    margin-bottom: 1rem;
-  }
-  .btn {
-    padding: 0.75rem 1.5rem;
-    font-size: 1rem;
-    border-radius: 8px;
-    border: none;
-    cursor: pointer;
-    font-weight: 600;
-    transition: transform 0.2s, box-shadow 0.2s;
-  }
-  .btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-  }
-  .btn-primary {
-    background: #5865F2;
-    color: white;
-  }
-  .btn-primary:hover {
-    background: #4752c4;
-  }
-  .landing-footer {
-    margin-top: auto;
-    padding-top: 3rem;
-    font-size: 0.875rem;
-    opacity: 0.7;
-  }
-</style>

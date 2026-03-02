@@ -34,8 +34,8 @@ Then open **http://localhost:5173**, click “Log in with Discord”, and after 
 ## Stack
 
 - **Backend**: FastAPI (Discord OIDC, session cookie, ACA-Py multitenancy client, **PostgreSQL** for user→tenant mapping)
-- **Frontend**: SvelteKit (landing, login redirect, `/wallet` with card grid), PWA-ready (vite-plugin-pwa)
-- **Cards**: Dynamic content; holographic base + glare/shine effects (no clip-path for generic trading cards)
+- **Frontend**: SvelteKit (landing, login redirect, `/wallet` with card grid), PWA-ready (vite-plugin-pwa). UI: [shadcn-svelte](https://www.shadcn-svelte.com/) (Tailwind) for layout and chrome; holographic cards are a separate module.
+- **Cards**: Holographic trading cards (`Card.svelte` + `cards.css` from pokemon-cards-css / brutality-cards); layout uses shadcn Card/Button/Skeleton.
 
 ## Quick start
 
@@ -79,12 +79,44 @@ Open http://localhost:5173. Log in with Discord (redirects to backend `/auth/dis
 - `SECRET_KEY` – used to sign session cookie
 - `DATABASE_URL` – PostgreSQL URL (e.g. `postgresql://user:password@localhost:5432/vc_cards`). Table `user_tenant` is created on startup.
 - `ACAPY_ADMIN_URL`, `ACAPY_ADMIN_API_KEY` – optional; if set, backend creates a tenant per user and lists credentials from ACA-Py. If not set, wallet still works with an empty card list.
+- `ADMIN_DISCORD_IDS` – optional; comma-separated Discord user IDs (same as `sub` after login). Those users can open `/admin` and call `/api/admin/*` (stats, user list).
+
+### Admin dashboard
+
+Admins log in with the same Discord OAuth as everyone else. Set `ADMIN_DISCORD_IDS` to your Discord user ID(s), e.g. `ADMIN_DISCORD_IDS=123456789,987654321`. After login, admins see an **Admin** button on the wallet page and can open **/admin** to view total users and a table of registered users (Discord username, ID, wallet ID, created date). Non-admins get 403 on `/api/admin/*` and are redirected from `/admin` to `/wallet`.
 
 ## Project layout
 
 - `agent/` – ACA-Py Dockerfile and `argfile.yml` for multitenancy (see [agent/README.md](agent/README.md))
 - `backend/` – FastAPI app, auth, ACA-Py client, PostgreSQL user→tenant store
-- `frontend/` – SvelteKit app, landing, `/wallet`, Card component and card CSS
+- `frontend/` – SvelteKit app, landing, `/wallet`, `/admin` (admin dashboard), Card component and card CSS
+
+## Docker
+
+Build all images from the repo root:
+
+```bash
+docker build -f backend/Dockerfile -t vc-cards-backend backend/
+docker build -f frontend/Dockerfile -t vc-cards-frontend frontend/
+docker build -f agent/Dockerfile -t vc-cards-acapy agent/
+```
+
+**Backend container and PostgreSQL:**  
+The backend needs a reachable `DATABASE_URL`. If you run the backend **in Docker**:
+
+- **Recommended:** Use docker-compose so the backend and Postgres share a network:
+  ```bash
+  docker compose up -d postgres backend
+  ```
+  The compose file sets `DATABASE_URL=postgresql://postgres:postgres@postgres:5432/vc_cards` so the backend connects to the `postgres` service.
+
+- **Standalone backend container** with Postgres on the host: use a hostname that resolves to the host from inside the container, e.g.  
+  `DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/vc_cards`  
+  On Linux you may need: `docker run --add-host=host.docker.internal:host-gateway ...`
+
+- **Backend image** expects `DATABASE_URL`, `SECRET_KEY`, `BACKEND_URL`, `FRONTEND_URL`, Discord env vars; expose port 8000.
+- **Frontend** image: static build served with nginx on port 80. Set `VITE_API_URL` at build time if the API is on another origin.
+- **Agent**: see [agent/README.md](agent/README.md); override `ACAPY_JWT_SECRET` at run time.
 
 ## Testing
 
