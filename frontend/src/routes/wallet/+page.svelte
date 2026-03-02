@@ -12,7 +12,7 @@
   let loading = $state(true);
   let error = $state('');
 
-  const API = typeof window !== 'undefined' ? '' : (import.meta.env.VITE_API_URL || '');
+  const API = import.meta.env.VITE_API_URL ?? '';
 
   onMount(async () => {
     try {
