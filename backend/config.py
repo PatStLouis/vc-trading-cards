@@ -14,7 +14,11 @@ class Settings(BaseSettings):
     # Discord OIDC
     discord_client_id: str = os.getenv("DISCORD_CLIENT_ID", "")
     discord_client_secret: str = os.getenv("DISCORD_CLIENT_SECRET", "")
-    discord_redirect_uri: str = os.getenv("DISCORD_REDIRECT_URI", "")  # optional; defaults to {backend_url}/auth/callback
+    discord_redirect_uri: str = os.getenv("DISCORD_REDIRECT_URI", "")
+
+    # Discord Bot (slash commands via Interactions API)
+    discord_bot_token: str = os.getenv("DISCORD_BOT_TOKEN", "")
+    discord_public_key: str = os.getenv("DISCORD_PUBLIC_KEY", "")
 
     # Session / JWT
     secret_key: str = os.getenv("SECRET_KEY", "change-me-in-production")

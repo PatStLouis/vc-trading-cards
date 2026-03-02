@@ -33,7 +33,7 @@ Then open **http://localhost:5173**, click “Log in with Discord”, and after 
 
 ## Stack
 
-- **Backend**: FastAPI (Discord OIDC, session cookie, ACA-Py multitenancy client, **PostgreSQL** for user→tenant mapping)
+- **Backend**: FastAPI (Discord OIDC, session cookie, **Discord bot** slash commands, ACA-Py multitenancy client, PostgreSQL user→tenant mapping)
 - **Frontend**: SvelteKit (landing, login redirect, `/wallet` with card grid), PWA-ready (vite-plugin-pwa). UI: [shadcn-svelte](https://www.shadcn-svelte.com/) (Tailwind) for layout and chrome; holographic cards are a separate module.
 - **Cards**: Holographic collectible cards (`Card.svelte` + `cards.css` from pokemon-cards-css / brutality-cards); layout uses shadcn Card/Button/Skeleton.
 
@@ -82,6 +82,22 @@ Open http://localhost:5173. Log in with Discord (redirects to backend `/auth/dis
 - `INNKEEPER_ID`, `INNKEEPER_KEY` – optional; Traction Innkeeper admin tenant ID and API key (for reservation/check-in flows). Leave unset if not using Innkeeper APIs.
 - `ADMIN_DISCORD_IDS` – optional; comma-separated Discord user IDs (same as `sub` after login). Those users can open `/admin` and call `/api/admin/*` (stats, user list).
 
+### Discord bot (slash commands)
+
+The app can act as a **Discord bot** so users can run `/wallet` and `/collection` in Discord. Optional; if not configured, the interactions endpoint returns 501.
+
+1. In the [Discord Developer Portal](https://discord.com/developers/applications), open your application (same one used for OAuth2).
+2. **Bot** → Add Bot if needed, then **Reset Token** and copy the token → `DISCORD_BOT_TOKEN`.
+3. **General Information** → **Application ID** is your `DISCORD_CLIENT_ID`. **Public Key** → `DISCORD_PUBLIC_KEY`.
+4. **Interactions Endpoint URL** → set to `https://your-backend.example.com/discord/interactions` (must be HTTPS in production).
+5. Register the slash commands once (from backend directory with `.env` set):
+   ```bash
+   uv run python scripts/register_discord_commands.py
+   ```
+6. Invite the bot to a server (OAuth2 → URL Generator → scopes: `bot`, `applications.commands`).
+
+Commands: **/wallet** — link to open your deck (and card count if logged in); **/collection** — same.
+
 ### Admin dashboard
 
 Admins log in with the same Discord OAuth as everyone else. Set `ADMIN_DISCORD_IDS` to your Discord user ID(s), e.g. `ADMIN_DISCORD_IDS=123456789,987654321`. After login, admins see an **Admin** button on the wallet page and can open **/admin** to view total users and a table of registered users (Discord username, ID, wallet ID, created date). Non-admins get 403 on `/api/admin/*` and are redirected from `/admin` to `/wallet`.
@@ -89,7 +105,7 @@ Admins log in with the same Discord OAuth as everyone else. Set `ADMIN_DISCORD_I
 ## Project layout
 
 - `agent/` – ACA-Py Dockerfile and `argfile.yml` for multitenancy (see [agent/README.md](agent/README.md))
-- `backend/` – FastAPI app, auth, ACA-Py client, PostgreSQL user→tenant store
+- `backend/` – FastAPI app, auth, **Discord bot** (POST `/discord/interactions`), ACA-Py client, PostgreSQL user→tenant store
 - `frontend/` – SvelteKit app, landing, `/wallet`, `/admin` (admin dashboard), Card component and card CSS
 
 ## Docker

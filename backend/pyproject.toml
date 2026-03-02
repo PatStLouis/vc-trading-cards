@@ -13,6 +13,7 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "python-dotenv>=1.0.0",
     "asyncpg>=0.29.0",
+    "discord-interactions>=0.4.0",
 ]
 
 [project.optional-dependencies]
