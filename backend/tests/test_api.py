@@ -85,6 +85,7 @@ async def test_wallet_credentials_normalizes_credential_subject(
             AsyncMock(
                 return_value={
                     "wallet_id": "test-wallet-id",
+                    "wallet_key": None,
                     "tenant_token": "fake-token",
                     "discord_username": "testuser",
                 }

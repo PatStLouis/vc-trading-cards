@@ -16,6 +16,7 @@ def patch_db():
     async def fake_get_tenant(discord_sub: str):
         return {
             "wallet_id": "test-wallet-id",
+            "wallet_key": None,
             "tenant_token": None,
             "discord_username": "testuser",
         }

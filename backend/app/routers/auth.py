@@ -59,21 +59,23 @@ async def discord_callback(
     # Get or create ACA-Py tenant for this user
     tenant = await get_tenant_by_discord_sub(discord_sub)
     if not tenant:
-        # Create new tenant
+        # Create new subwallet on first login: generate key, create tenant, store wallet_id + wallet_key + token
         label = f"vc-cards-{discord_sub}"
-        created = await create_tenant(label)
+        wallet_key = secrets.token_urlsafe(32)
+        created = await create_tenant(label, wallet_key=wallet_key)
         if created and created.get("wallet_id"):
             await set_tenant_for_user(
                 discord_sub,
                 discord_username,
                 created["wallet_id"],
                 created.get("token"),
+                wallet_key=wallet_key,
             )
             tenant = await get_tenant_by_discord_sub(discord_sub)
         else:
-            # No ACA-Py: use a placeholder wallet_id so app still works
+            # No ACA-Py: use a placeholder wallet_id so app still works (no wallet_key)
             wallet_id = f"local-{discord_sub}"
-            await set_tenant_for_user(discord_sub, discord_username, wallet_id, None)
+            await set_tenant_for_user(discord_sub, discord_username, wallet_id, None, wallet_key=None)
             tenant = await get_tenant_by_discord_sub(discord_sub)
 
     if not tenant:

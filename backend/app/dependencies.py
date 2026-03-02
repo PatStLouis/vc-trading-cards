@@ -41,4 +41,4 @@ async def get_tenant_token_for_request(user: dict = Depends(get_current_user)) -
         return None
     if tenant.get("tenant_token"):
         return tenant["tenant_token"]
-    return await get_tenant_token(tenant["wallet_id"])
+    return await get_tenant_token(tenant["wallet_id"], tenant.get("wallet_key") or None)

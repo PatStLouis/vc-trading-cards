@@ -5,18 +5,22 @@ from config import get_settings
 _settings = get_settings()
 
 
-async def create_tenant(label: str) -> dict | None:
-    """Create a multitenant wallet. Returns { wallet_id, token } or None if ACA-Py not configured."""
+async def create_tenant(label: str, wallet_key: str | None = None) -> dict | None:
+    """Create a multitenant subwallet. Returns { wallet_id, token } or None if ACA-Py not configured.
+    If wallet_key is provided, the wallet is created with that key (caller must store it)."""
     if not _settings.acapy_admin_url.strip():
         return None
     async with httpx.AsyncClient(timeout=30.0) as client:
         headers = {}
         if _settings.acapy_admin_api_key:
             headers["X-API-Key"] = _settings.acapy_admin_api_key
+        body: dict = {"label": label}
+        if wallet_key:
+            body["wallet_key"] = wallet_key
         try:
             r = await client.post(
                 f"{_settings.acapy_admin_url.rstrip('/')}/multitenancy/tenant",
-                json={"label": label},
+                json=body,
                 headers=headers,
             )
             r.raise_for_status()
@@ -29,17 +33,21 @@ async def create_tenant(label: str) -> dict | None:
             return None
 
 
-async def get_tenant_token(wallet_id: str) -> str | None:
-    """Get a new token for an existing tenant."""
+async def get_tenant_token(wallet_id: str, wallet_key: str | None = None) -> str | None:
+    """Get a new token for an existing tenant. wallet_key required by some multitenant providers."""
     if not _settings.acapy_admin_url.strip():
         return None
     async with httpx.AsyncClient(timeout=30.0) as client:
         headers = {}
         if _settings.acapy_admin_api_key:
             headers["X-API-Key"] = _settings.acapy_admin_api_key
+        body: dict = {}
+        if wallet_key:
+            body["wallet_key"] = wallet_key
         try:
             r = await client.post(
                 f"{_settings.acapy_admin_url.rstrip('/')}/multitenancy/tenant/{wallet_id}/token",
+                json=body if body else None,
                 headers=headers,
             )
             r.raise_for_status()
