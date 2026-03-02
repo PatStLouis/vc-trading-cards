@@ -1,6 +1,6 @@
 # ACA-Py agent for VC Trading Cards (multitenancy via multitenant_provider plugin)
 # Build: docker build -f agent/Dockerfile -t vc-cards-acapy agent/
-# Run: docker run --rm -p 8031:8031 -e ACAPY_JWT_SECRET=your-secret vc-cards-acapy
+# Run: docker run --rm -p 8020:8020 -p 8022:8022 -e ACAPY_JWT_SECRET=your-secret vc-cards-acapy
 
 ARG ACAPY_IMAGE=ghcr.io/openwallet-foundation/acapy-agent:latest
 FROM ${ACAPY_IMAGE}
@@ -15,6 +15,6 @@ COPY argfile.yml /app/argfile.yml
 # Override at runtime: -e ACAPY_JWT_SECRET=...
 ENV ACAPY_JWT_SECRET=insecure-jwt-secret-change-in-production
 
-EXPOSE 8031
+EXPOSE 8020 8022
 
 CMD ["start", "--arg-file", "/app/argfile.yml"]

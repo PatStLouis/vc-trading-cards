@@ -8,11 +8,11 @@ This directory runs an [ACA-Py](https://aca-py.org/) agent in **multitenancy** m
 Uses the stock image with built-in multitenancy only (no multitenant_provider plugin). For production or parity with digicred, use Option B.
 
 ```bash
-docker run --rm -d --name vc-cards-acapy -p 8031:8031 -p 8032:8032 \
+docker run --rm -d --name vc-cards-acapy -p 8020:8020 -p 8022:8022 \
   -e ACAPY_JWT_SECRET=your-jwt-secret-min-32-chars \
   ghcr.io/openwallet-foundation/acapy-agent:latest \
-  start -it http 0.0.0.0 8032 -ot http \
-  --admin 0.0.0.0 8031 --admin-insecure-mode \
+  start -it http 0.0.0.0 8022 -ot http \
+  --admin 0.0.0.0 8020 --admin-insecure-mode \
   --multitenant --multitenant-admin --jwt-secret your-jwt-secret-min-32-chars \
   --wallet-type askar --wallet-name vc-cards-base-wallet --wallet-key change-me \
   --no-ledger --auto-provision
@@ -27,8 +27,8 @@ docker build -f agent/Dockerfile -t vc-cards-acapy agent/
 # Run (override JWT secret via env)
 docker run --rm -d \
   --name vc-cards-acapy \
-  -p 8031:8031 \
-  -p 8032:8032 \
+  -p 8020:8020 \
+  -p 8022:8022 \
   -e ACAPY_JWT_SECRET=your-jwt-secret-min-32-chars \
   vc-cards-acapy
 ```
@@ -36,7 +36,7 @@ docker run --rm -d \
 Then in the **backend** `.env`:
 
 ```env
-ACAPY_ADMIN_URL=http://localhost:8031
+ACAPY_ADMIN_URL=http://localhost:8020
 # ACAPY_ADMIN_API_KEY=   # leave unset when using admin-insecure-mode
 ```
 
@@ -46,11 +46,11 @@ For production, do **not** use `admin-insecure-mode`. Set `admin-insecure-mode: 
 
 | File | Purpose |
 |------|--------|
-| `argfile.yml` | ACA-Py startup config: admin 8031, inbound http 8032, multitenant + multitenant_provider plugin, JWT secret, wallet, no-ledger, auto-provision |
+| `argfile.yml` | ACA-Py startup config: admin 8020, DIDComm HTTP inbound 8022, multitenant + multitenant_provider plugin, JWT secret, wallet, no-ledger, auto-provision |
 | `Dockerfile` | Image installs multitenant_provider plugin, copies argfile, runs `aca-py start --arg-file /app/argfile.yml` |
 | `.env.example` | Optional env for the container (e.g. `ACAPY_JWT_SECRET`) |
 
 ## Ports
 
-- **8031** – Admin API (create tenant, get token, list credentials). Backend talks to this.
-- **8032** – Inbound HTTP transport (required by ACA-Py; can be unused if you only use the admin API).
+- **8020** – Admin API (create tenant, get token, list credentials). Backend talks to this.
+- **8022** – DIDComm HTTP inbound transport (required by ACA-Py).

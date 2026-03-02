@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     session_ttl_seconds: int = 86400 * 7  # 7 days
 
     # ACA-Py multitenancy
-    acapy_admin_url: str = os.getenv("ACAPY_ADMIN_URL", "http://localhost:8031")
+    acapy_admin_url: str = os.getenv("ACAPY_ADMIN_URL", "http://localhost:8020")
     acapy_admin_api_key: str = os.getenv("ACAPY_ADMIN_API_KEY", "")
 
     # DB for user -> tenant mapping (PostgreSQL)

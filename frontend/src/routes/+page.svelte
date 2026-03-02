@@ -3,6 +3,8 @@
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
 
+  const API_BASE = import.meta.env.VITE_API_URL ?? '';
+
   let error = $state('');
 
   onMount(() => {
@@ -11,7 +13,7 @@
   });
 
   function login() {
-    window.location.href = '/auth/discord';
+    window.location.href = `${API_BASE}/auth/discord`;
   }
 </script>
 

@@ -13,14 +13,14 @@ Run these in order (each in its own terminal, or run Postgres and ACA-Py in the 
 
 2. **ACA-Py agent** (multitenancy; backend will create one wallet per user)
    ```bash
-   cd agent && docker build -t vc-cards-acapy . && docker run --rm -d --name vc-cards-acapy -p 8031:8031 -e ACAPY_JWT_SECRET=your-jwt-secret-min-32-chars vc-cards-acapy
+   cd agent && docker build -t vc-cards-acapy . && docker run --rm -d --name vc-cards-acapy -p 8020:8020 -p 8022:8022 -e ACAPY_JWT_SECRET=your-jwt-secret-min-32-chars vc-cards-acapy
    ```
    Or use the [no-build option](agent/README.md#quick-run-with-docker) in `agent/README.md`.
 
 3. **Backend**
    ```bash
    cd backend && cp .env.example .env
-   # Edit .env: DISCORD_*, DATABASE_URL, ACAPY_ADMIN_URL=http://localhost:8031
+   # Edit .env: DISCORD_*, DATABASE_URL, ACAPY_ADMIN_URL=http://localhost:8020
    uv sync && uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
 
@@ -114,8 +114,11 @@ The backend needs a reachable `DATABASE_URL`. If you run the backend **in Docker
   `DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/vc_cards`  
   On Linux you may need: `docker run --add-host=host.docker.internal:host-gateway ...`
 
+**If you see `ConnectionRefusedError` when starting the backend:**  
+The backend is trying to connect to the host in `DATABASE_URL` and nothing is reachable. Fix: (1) Use **docker compose** and run `docker compose up -d postgres backend` so `DATABASE_URL` is set to `postgres:5432` and Postgres is on the same network. (2) Or, if you run the backend container alone, ensure Postgres is running (e.g. on the host or another container) and set `DATABASE_URL` to that host (e.g. `host.docker.internal:5432` from inside the container, not `localhost`).
+
 - **Backend image** expects `DATABASE_URL`, `SECRET_KEY`, `BACKEND_URL`, `FRONTEND_URL`, Discord env vars; expose port 8000.
-- **Frontend** image: static build served with nginx on port 80. Set `VITE_API_URL` at build time if the API is on another origin.
+- **Frontend** image: static build served with nginx on port 80. When the backend is on a **different origin** (e.g. backend on :8000, frontend on :80), build with `--build-arg VITE_API_URL=http://localhost:8000` so "Log in with Discord" and API calls use the backend URL; otherwise you get "Not found: /auth/discord".
 - **Agent**: see [agent/README.md](agent/README.md); override `ACAPY_JWT_SECRET` at run time.
 
 ## Testing

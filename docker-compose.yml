@@ -1,12 +1,11 @@
 # Run backend + Postgres (and optionally agent) on a shared network so backend can reach the DB.
 # From repo root:
-#   docker compose up -d postgres
-#   docker compose up -d agent    # optional
-#   docker compose up -d backend
-# Or: docker compose up -d   (all services)
+#   docker compose up -d postgres   # start DB first (backend depends on it)
+#   docker compose up -d backend   # then backend (or run both: docker compose up -d)
+#   docker compose up -d agent     # optional
 #
-# Backend needs DISCORD_* and SECRET_KEY; copy backend/.env.example to backend/.env and set values.
-# Override env for backend: docker compose run -e DATABASE_URL=... backend  (or use env_file)
+# Backend needs DISCORD_* and SECRET_KEY in backend/.env. DATABASE_URL below overrides .env
+# so the backend always connects to the postgres service (do not use localhost in .env when running in Docker).
 
 services:
   postgres:
@@ -33,7 +32,7 @@ services:
       - ./backend/.env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vc_cards
-      ACAPY_ADMIN_URL: http://agent:8031
+      ACAPY_ADMIN_URL: http://agent:8020
       BACKEND_URL: http://localhost:8000
       FRONTEND_URL: http://localhost:5173
     depends_on:
@@ -48,8 +47,8 @@ services:
       context: ./agent
       dockerfile: Dockerfile
     ports:
-      - "8031:8031"
-      - "8032:8032"
+      - "8020:8020"
+      - "8022:8022"
     environment:
       ACAPY_JWT_SECRET: ${ACAPY_JWT_SECRET:-insecure-jwt-secret-min-32-chars}
 

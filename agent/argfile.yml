@@ -5,14 +5,14 @@
 # Admin API (backend creates tenants and lists credentials)
 admin:
   - 0.0.0.0
-  - 8031
+  - 8020
 
 # Dev: no API key. For production set admin-insecure-mode: false and admin-api-key / ACAPY_ADMIN_API_KEY.
 admin-insecure-mode: true
 
-# Transport (required by ACA-Py; admin-only use still needs at least one inbound)
+# Transport (required by ACA-Py; DIDComm HTTP inbound)
 inbound-transport:
-  - [http, 0.0.0.0, 8032]
+  - [http, 0.0.0.0, 8022]
 outbound-transport: [http]
 
 # Multitenant provider plugin (see digicred-crms plugins/docker/default.yml)
