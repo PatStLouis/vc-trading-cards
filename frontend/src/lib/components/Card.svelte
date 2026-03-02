@@ -14,6 +14,13 @@
   export let img = '';
   export let back = '/card-back.svg';
 
+  $: typesStr = Array.isArray(types) ? (types[0] ?? 'fighting') : (types || 'fighting');
+  $: numberStr = String(number ?? '');
+  $: setStr = String(set ?? '');
+  $: subtypesStr = String(subtypes ?? 'trading-cards');
+  $: supertypeStr = String(supertype ?? 'trading-card');
+  $: rarityStr = String(rarity ?? 'common').toLowerCase().replace(/\s+/g, '-');
+
   const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
   const round = (v: number) => Math.round(v);
   const adjust = (v: number, fromMin: number, fromMax: number, toMin: number, toMax: number) =>

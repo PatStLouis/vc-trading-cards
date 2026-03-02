@@ -23,6 +23,8 @@
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
+  --font-heading: 'Outfit', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
 * {
@@ -34,7 +36,7 @@ html, body {
   margin: 0;
   padding: 0;
   scroll-behavior: smooth;
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-heading);
   background: var(--color-background);
   color: var(--color-foreground);
 }

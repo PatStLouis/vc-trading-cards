@@ -15,9 +15,10 @@ inbound-transport:
   - [http, 0.0.0.0, 8022]
 outbound-transport: [http]
 
-# Multitenant provider plugin (see digicred-crms plugins/docker/default.yml)
+# Multitenant provider + Traction Innkeeper (tenant/reservation management)
 plugin:
   - multitenant_provider.v1_0
+  - traction_innkeeper.v1_0
 
 plugin-config-value:
   - multitenant_provider.manager.class_name="multitenant_provider.v1_0.manager.AskarMultitokenMultitenantManager"
@@ -25,6 +26,10 @@ plugin-config-value:
   - multitenant_provider.errors.on_unneeded_wallet_key=false
   - multitenant_provider.token_expiry.units=days
   - multitenant_provider.token_expiry.amount=1
+  - traction_innkeeper.innkeeper_wallet.tenant_id=innkeeper
+  - traction_innkeeper.innkeeper_wallet.wallet_name=traction_innkeeper
+  - traction_innkeeper.innkeeper_wallet.wallet_key=change-me-innkeeper-in-production
+  - traction_innkeeper.reservation.expiry_minutes=2880
 
 # Multitenancy
 multitenant: true
