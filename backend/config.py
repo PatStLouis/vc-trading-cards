@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     acapy_admin_url: str = os.getenv("ACAPY_ADMIN_URL", "http://localhost:8020")
     acapy_admin_api_key: str = os.getenv("ACAPY_ADMIN_API_KEY", "")
 
+    # Traction Innkeeper: admin tenant credentials (tenant_id + tenant_api_key) for reservation/check-in etc.
+    innkeeper_id: str = os.getenv("INNKEEPER_ID", "")
+    innkeeper_key: str = os.getenv("INNKEEPER_KEY", "")
+
     # DB for user -> tenant mapping (PostgreSQL)
     database_url: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/tritone_cards")
 

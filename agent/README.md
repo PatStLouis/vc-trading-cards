@@ -24,12 +24,13 @@ docker run --rm -d --name tritone-cards-acapy -p 8020:8020 -p 8022:8022 \
 # From repo root
 docker build -f agent/Dockerfile -t tritone-cards-acapy agent/
 
-# Run (override JWT secret via env)
+# Run (override JWT secret and Innkeeper wallet key via env)
 docker run --rm -d \
   --name tritone-cards-acapy \
   -p 8020:8020 \
   -p 8022:8022 \
   -e ACAPY_JWT_SECRET=your-jwt-secret-min-32-chars \
+  -e INNKEEPER_WALLET_KEY=your-innkeeper-wallet-key \
   tritone-cards-acapy
 ```
 
@@ -46,8 +47,9 @@ For production, do **not** use `admin-insecure-mode`. Set `admin-insecure-mode: 
 
 | File | Purpose |
 |------|--------|
-| `argfile.yml` | ACA-Py startup config: admin 8020, DIDComm HTTP inbound 8022, multitenant + multitenant_provider plugin, JWT secret, wallet, no-ledger, auto-provision |
-| `Dockerfile` | Image installs multitenant_provider plugin, copies argfile, runs `aca-py start --arg-file /app/argfile.yml` |
+| `argfile.yml` | ACA-Py startup config: admin 8020, DIDComm HTTP inbound 8022, multitenant + multitenant_provider + traction_innkeeper, JWT secret, wallet, no-ledger. Use `${INNKEEPER_WALLET_KEY}` to substitute from env. |
+| `entrypoint.py` | Expands `${VAR}` in argfile.yml from environment, then runs aca-py. |
+| `Dockerfile` | Image installs plugins, copies argfile and entrypoint, runs via entrypoint so env vars are applied. |
 | `.env.example` | Optional env for the container (e.g. `ACAPY_JWT_SECRET`) |
 
 ## Ports

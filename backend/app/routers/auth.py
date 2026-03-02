@@ -5,7 +5,7 @@ import secrets
 from app.auth.discord import get_authorize_url, exchange_code_for_tokens, get_discord_user
 from app.auth.session import encode_session, decode_session
 from app.db import get_tenant_by_discord_sub, set_tenant_for_user, init_db
-from app.services.acapy import create_tenant
+from app.services.acapy import create_tenant, get_tenant_token
 from config import get_settings
 
 router = APIRouter(tags=["Auth"], prefix="/auth")
@@ -56,27 +56,43 @@ async def discord_callback(
     discord_sub = str(user.get("id", ""))
     discord_username = user.get("username") or user.get("global_name") or ""
 
-    # Get or create ACA-Py tenant for this user
-    tenant = await get_tenant_by_discord_sub(discord_sub)
-    if not tenant:
-        # Create new subwallet on first login: generate key, create tenant, store wallet_id + wallet_key + token
-        label = f"tritone-cards-{discord_sub}"
-        wallet_key = secrets.token_urlsafe(32)
-        created = await create_tenant(label, wallet_key=wallet_key)
-        if created and created.get("wallet_id"):
+    tenant = None
+    # Admins with Innkeeper config use the shared Innkeeper tenant instead of creating a new one
+    admin_ids = {s.strip() for s in (settings.admin_discord_ids or "").split(",") if s.strip()}
+    is_admin_user = discord_sub in admin_ids
+    if is_admin_user and settings.innkeeper_id and settings.innkeeper_key:
+        token = await get_tenant_token(settings.innkeeper_id, settings.innkeeper_key)
+        if token:
             await set_tenant_for_user(
                 discord_sub,
                 discord_username,
-                created["wallet_id"],
-                created.get("token"),
-                wallet_key=wallet_key,
+                settings.innkeeper_id,
+                token,
+                wallet_key=settings.innkeeper_key,
             )
             tenant = await get_tenant_by_discord_sub(discord_sub)
-        else:
-            # No ACA-Py: use a placeholder wallet_id so app still works (no wallet_key)
-            wallet_id = f"local-{discord_sub}"
-            await set_tenant_for_user(discord_sub, discord_username, wallet_id, None, wallet_key=None)
-            tenant = await get_tenant_by_discord_sub(discord_sub)
+    if not tenant:
+        # Get or create ACA-Py tenant for this user (non-admins, or admin when no Innkeeper / token failed)
+        tenant = await get_tenant_by_discord_sub(discord_sub)
+        if not tenant:
+            # Create new subwallet on first login: generate key, create tenant, store wallet_id + wallet_key + token
+            label = f"tritone-cards-{discord_sub}"
+            wallet_key = secrets.token_urlsafe(32)
+            created = await create_tenant(label, wallet_key=wallet_key)
+            if created and created.get("wallet_id"):
+                await set_tenant_for_user(
+                    discord_sub,
+                    discord_username,
+                    created["wallet_id"],
+                    created.get("token"),
+                    wallet_key=wallet_key,
+                )
+                tenant = await get_tenant_by_discord_sub(discord_sub)
+            else:
+                # No ACA-Py: use a placeholder wallet_id so app still works (no wallet_key)
+                wallet_id = f"local-{discord_sub}"
+                await set_tenant_for_user(discord_sub, discord_username, wallet_id, None, wallet_key=None)
+                tenant = await get_tenant_by_discord_sub(discord_sub)
 
     if not tenant:
         return _frontend_redirect("/", "error=tenant_failed")

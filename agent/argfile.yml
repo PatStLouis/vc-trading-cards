@@ -2,18 +2,22 @@
 # Aligned with digicred-crms multitenant pattern (multitenant_provider plugin).
 # Used with: aca-start --arg-file /app/argfile.yml
 
+label: tritone-cards
+
 # Admin API (backend creates tenants and lists credentials)
 admin:
   - 0.0.0.0
   - 8020
 
 # Dev: no API key. For production set admin-insecure-mode: false and admin-api-key / ACAPY_ADMIN_API_KEY.
-admin-insecure-mode: true
+admin-insecure-mode: false
 
 # Transport (required by ACA-Py; DIDComm HTTP inbound)
 inbound-transport:
   - [http, 0.0.0.0, 8022]
 outbound-transport: [http]
+# Public URL of this agent (override via ENDPOINT_URL env in production)
+endpoint: [http://localhost:8022]
 
 # Multitenant provider + Traction Innkeeper (tenant/reservation management)
 plugin:
@@ -28,8 +32,10 @@ plugin-config-value:
   - multitenant_provider.token_expiry.amount=1
   - traction_innkeeper.innkeeper_wallet.tenant_id=innkeeper
   - traction_innkeeper.innkeeper_wallet.wallet_name=traction_innkeeper
-  - traction_innkeeper.innkeeper_wallet.wallet_key=change-me-innkeeper-in-production
+  # Substitute at runtime: set INNKEEPER_WALLET_KEY when running the container
+  - traction_innkeeper.innkeeper_wallet.wallet_key=${INNKEEPER_WALLET_KEY}
   - traction_innkeeper.reservation.expiry_minutes=2880
+  - traction_innkeeper.reservation.auto_approve=true
 
 # Multitenancy
 multitenant: true
@@ -38,7 +44,7 @@ multitenant-admin: true
 jwt-secret: change-me-use-env-in-production
 
 # Wallet (base wallet for agent; sub-wallets created per tenant)
-wallet-type: askar
+wallet-type: askar-anoncreds
 wallet-name: tritone-cards-base-wallet
 wallet-key: change-me-in-production
 wallet-local-did: true

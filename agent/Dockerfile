@@ -16,10 +16,13 @@ RUN pip install --no-cache-dir git+https://github.com/openwallet-foundation/acap
 RUN pip install --no-cache-dir "git+https://github.com/bcgov/traction@main#subdirectory=plugins/traction_innkeeper"
 
 COPY argfile.yml /app/argfile.yml
+COPY entrypoint.py /app/entrypoint.py
 
-# Override at runtime: -e ACAPY_JWT_SECRET=...
+# Override at runtime: -e ACAPY_JWT_SECRET=... -e INNKEEPER_WALLET_KEY=...
 ENV ACAPY_JWT_SECRET=insecure-jwt-secret-change-in-production
+ENV INNKEEPER_WALLET_KEY=change-me-innkeeper-in-production
 
 EXPOSE 8020 8022
 
-CMD ["start", "--arg-file", "/app/argfile.yml"]
+ENTRYPOINT ["python", "/app/entrypoint.py"]
+CMD []

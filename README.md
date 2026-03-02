@@ -79,6 +79,7 @@ Open http://localhost:5173. Log in with Discord (redirects to backend `/auth/dis
 - `SECRET_KEY` – used to sign session cookie
 - `DATABASE_URL` – PostgreSQL URL (e.g. `postgresql://user:password@localhost:5432/tritone_cards`). Table `user_tenant` is created on startup.
 - `ACAPY_ADMIN_URL`, `ACAPY_ADMIN_API_KEY` – optional; if set, backend creates a tenant per user and lists credentials from ACA-Py. If not set, wallet still works with an empty card list.
+- `INNKEEPER_ID`, `INNKEEPER_KEY` – optional; Traction Innkeeper admin tenant ID and API key (for reservation/check-in flows). Leave unset if not using Innkeeper APIs.
 - `ADMIN_DISCORD_IDS` – optional; comma-separated Discord user IDs (same as `sub` after login). Those users can open `/admin` and call `/api/admin/*` (stats, user list).
 
 ### Admin dashboard
