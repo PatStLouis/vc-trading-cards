@@ -40,4 +40,4 @@ app.include_router(admin.router)
 
 @app.get("/")
 async def root():
-    return {"service": "VC Trading Cards API", "docs": "/docs"}
+    return {"service": "Tritone Cards API", "docs": "/docs"}

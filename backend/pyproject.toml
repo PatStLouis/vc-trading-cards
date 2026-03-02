@@ -1,7 +1,7 @@
 [project]
 name = "vc-trading-cards-backend"
 version = "0.1.0"
-description = "FastAPI backend: Discord OIDC + ACA-Py multitenancy for VC trading cards"
+description = "FastAPI backend: Discord OIDC + ACA-Py multitenancy for Tritone Cards (The Devil's Interval Collectible Cards)"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

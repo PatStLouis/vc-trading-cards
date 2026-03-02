@@ -10,9 +10,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'VC Trading Cards',
-        short_name: 'VC Cards',
-        description: 'Browse your verifiable credential trading cards',
+        name: 'Tritone Cards',
+        short_name: 'Tritone Cards',
+        description: "The Devil's Interval Collectible Cards — collect and verify credentials as holographic cards",
         theme_color: '#0a0a0a',
         background_color: '#0a0a0a',
         display: 'standalone',

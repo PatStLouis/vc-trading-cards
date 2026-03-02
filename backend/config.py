@@ -4,7 +4,7 @@ from functools import lru_cache
 
 
 class Settings(BaseSettings):
-    app_title: str = "VC Trading Cards API"
+    app_title: str = "Tritone Cards API"
     app_version: str = "0.1.0"
 
     # Server (public URL of this backend – used for redirect URIs and cookie secure flag)
@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Session / JWT
     secret_key: str = os.getenv("SECRET_KEY", "change-me-in-production")
-    session_cookie_name: str = "vc_cards_session"
+    session_cookie_name: str = "tritone_cards_session"
     session_ttl_seconds: int = 86400 * 7  # 7 days
 
     # ACA-Py multitenancy
@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     acapy_admin_api_key: str = os.getenv("ACAPY_ADMIN_API_KEY", "")
 
     # DB for user -> tenant mapping (PostgreSQL)
-    database_url: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/vc_cards")
+    database_url: str = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/tritone_cards")
 
     # Admin: comma-separated Discord user IDs allowed to access /admin
     admin_discord_ids: str = os.getenv("ADMIN_DISCORD_IDS", "")

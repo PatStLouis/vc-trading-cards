@@ -1,6 +1,6 @@
 # Frontend: SvelteKit static build served with nginx
 # Build from repo root: docker build -f frontend/Dockerfile frontend/
-# Or from frontend: docker build -t vc-cards-frontend .
+# Or from frontend: docker build -t tritone-cards-frontend .
 
 # Stage 1: build
 FROM node:20-alpine AS builder

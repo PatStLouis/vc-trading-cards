@@ -14,7 +14,7 @@ async def test_root(client: AsyncClient):
     r = await client.get("/")
     assert r.status_code == 200
     data = r.json()
-    assert data.get("service") == "VC Trading Cards API"
+    assert data.get("service") == "Tritone Cards API"
     assert "docs" in data
 
 

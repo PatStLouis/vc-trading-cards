@@ -1,1 +1,1 @@
-# VC Trading Cards Backend
+# Tritone Cards Backend

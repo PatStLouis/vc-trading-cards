@@ -60,7 +60,7 @@ async def discord_callback(
     tenant = await get_tenant_by_discord_sub(discord_sub)
     if not tenant:
         # Create new subwallet on first login: generate key, create tenant, store wallet_id + wallet_key + token
-        label = f"vc-cards-{discord_sub}"
+        label = f"tritone-cards-{discord_sub}"
         wallet_key = secrets.token_urlsafe(32)
         created = await create_tenant(label, wallet_key=wallet_key)
         if created and created.get("wallet_id"):

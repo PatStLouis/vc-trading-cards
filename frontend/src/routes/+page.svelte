@@ -25,15 +25,15 @@
   <div class="landing__content relative z-10 w-full max-w-xl">
     <!-- Badge -->
     <p class="landing__badge text-xs font-medium tracking-wider uppercase text-primary/90 mb-6">
-      Verifiable credentials · Your wallet
+      The Devil's Interval · Verifiable credentials
     </p>
 
     <h1 class="landing__title text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight mb-4">
-      <span class="landing__title-line">VC Trading</span>
+      <span class="landing__title-line">Tritone</span>
       <span class="landing__title-line landing__title-accent">Cards</span>
     </h1>
     <p class="landing__tagline text-muted-foreground text-lg sm:text-xl leading-relaxed mb-10 max-w-md mx-auto">
-      Collect, verify, and own your credentials as holographic trading cards. One wallet, all your proofs.
+      The Devil's Interval Collectible Cards. Collect, verify, and own your credentials as holographic cards—one wallet, all your proofs.
     </p>
 
     <Card.Root class="landing__card w-full border border-border/80 bg-card/95 text-card-foreground rounded-2xl shadow-2xl shadow-black/30 p-8 backdrop-blur-sm">
@@ -80,9 +80,9 @@
     position: absolute;
     inset: 0;
     background:
-      radial-gradient(ellipse 80% 50% at 50% -20%, oklch(0.35 0.15 264 / 0.35), transparent),
+      radial-gradient(ellipse 80% 50% at 50% -20%, oklch(0.32 0.12 25 / 0.4), transparent),
       radial-gradient(ellipse 60% 40% at 100% 50%, oklch(0.25 0.1 280 / 0.2), transparent),
-      radial-gradient(ellipse 60% 40% at 0% 80%, oklch(0.28 0.12 260 / 0.2), transparent);
+      radial-gradient(ellipse 60% 40% at 0% 80%, oklch(0.28 0.1 15 / 0.25), transparent);
     pointer-events: none;
   }
 
@@ -107,7 +107,7 @@
   }
 
   .landing__title-accent {
-    background: linear-gradient(135deg, oklch(0.75 0.15 264), oklch(0.65 0.2 290));
+    background: linear-gradient(135deg, oklch(0.72 0.18 25), oklch(0.58 0.22 15));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;

@@ -13,7 +13,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: vc_cards
+      POSTGRES_DB: tritone_cards
     ports:
       - "5432:5432"
     healthcheck:
@@ -31,7 +31,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/vc_cards
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/tritone_cards
       ACAPY_ADMIN_URL: http://agent:8020
       BACKEND_URL: http://localhost:8000
       FRONTEND_URL: http://localhost:5173

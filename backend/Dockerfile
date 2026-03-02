@@ -1,6 +1,6 @@
 # Backend: FastAPI + Discord OIDC + ACA-Py client
 # Build from repo root: docker build -f backend/Dockerfile backend/
-# Or from backend: docker build -t vc-cards-backend .
+# Or from backend: docker build -t tritone-cards-backend .
 
 FROM python:3.12-slim
 

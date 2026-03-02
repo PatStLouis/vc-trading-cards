@@ -54,8 +54,9 @@
       <div>
         <Card.Title class="text-xl font-semibold">Admin dashboard</Card.Title>
         <Card.Description class="text-muted-foreground text-sm mt-1">
+          Tritone Cards
           {#if user}
-            Logged in as @{user.username}
+            · Logged in as @{user.username}
           {/if}
         </Card.Description>
       </div>

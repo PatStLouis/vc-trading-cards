@@ -69,8 +69,9 @@
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 class="wallet-header__title text-2xl md:text-3xl font-bold tracking-tight">
-            My collection
+            My deck
           </h1>
+          <p class="wallet-header__tagline text-muted-foreground/80 text-xs mt-0.5">Tritone Cards · The Devil's Interval</p>
           {#if user}
             <p class="wallet-header__meta text-muted-foreground text-sm mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <span>@{user.username}</span>
@@ -121,14 +122,14 @@
           </svg>
         </div>
         <Card.Header class="p-0">
-          <Card.Title class="text-xl font-semibold">No cards yet</Card.Title>
-          <Card.Description class="text-muted-foreground mt-3 max-w-md mx-auto leading-relaxed">
-            Credentials issued to this wallet will show up here as holographic cards. Get your first credential to start your collection.
-          </Card.Description>
+        <Card.Title class="text-xl font-semibold">No cards yet</Card.Title>
+        <Card.Description class="text-muted-foreground mt-3 max-w-md mx-auto leading-relaxed">
+          Credentials issued to this wallet will show up here as holographic Tritone cards. Get your first credential to start your deck.
+        </Card.Description>
         </Card.Header>
       </Card.Root>
     {:else}
-      <section class="card-grid grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-8 py-4" aria-label="Trading cards">
+      <section class="card-grid grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-8 py-4" aria-label="Collectible cards">
         {#each cards as card (card.id)}
           <TradingCard
             id={card.id}

@@ -1,4 +1,4 @@
-# ACA-Py multitenancy config for VC Trading Cards
+# ACA-Py multitenancy config for Tritone Cards
 # Aligned with digicred-crms multitenant pattern (multitenant_provider plugin).
 # Used with: aca-start --arg-file /app/argfile.yml
 
@@ -39,7 +39,7 @@ jwt-secret: change-me-use-env-in-production
 
 # Wallet (base wallet for agent; sub-wallets created per tenant)
 wallet-type: askar
-wallet-name: vc-cards-base-wallet
+wallet-name: tritone-cards-base-wallet
 wallet-key: change-me-in-production
 wallet-local-did: true
 auto-provision: true
