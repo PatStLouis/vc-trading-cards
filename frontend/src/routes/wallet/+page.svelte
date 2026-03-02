@@ -54,6 +54,21 @@
     };
   });
 
+  // When a card is expanded, lock body scroll and prevent touch from scrolling the background
+  $effect(() => {
+    const active = $activeCard;
+    if (active) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      const preventTouchScroll = (e: TouchEvent) => e.preventDefault();
+      document.addEventListener('touchmove', preventTouchScroll, { passive: false });
+      return () => {
+        document.body.style.overflow = prevOverflow;
+        document.removeEventListener('touchmove', preventTouchScroll);
+      };
+    }
+  });
+
   async function logout() {
     await fetch(`${API || ''}/auth/logout`, { method: 'POST', credentials: 'include' });
     goto('/');

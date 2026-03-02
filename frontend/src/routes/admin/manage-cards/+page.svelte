@@ -261,6 +261,19 @@
     stopCamera();
     videoEl = null;
   }
+
+  // When preview modal is open, lock body scroll and prevent touch from scrolling the background
+  $effect(() => {
+    if (!previewCard) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const preventTouchScroll = (e: TouchEvent) => e.preventDefault();
+    document.addEventListener('touchmove', preventTouchScroll, { passive: false });
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.removeEventListener('touchmove', preventTouchScroll);
+    };
+  });
 </script>
 
 <main class="manage-cards-page py-4 px-3 sm:py-6 sm:px-4">
@@ -455,7 +468,12 @@
 
   <!-- Modal: Preview (holographic card) -->
   {#if previewCard}
-    <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70" role="dialog" aria-modal="true" aria-label="Card preview" onclick={() => (previewCard = null)}>
+    <div
+      class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 overflow-hidden touch-none"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Card preview"
+      onclick={() => (previewCard = null)}>
       <div class="max-w-[min(280px,95vw)]" onclick={(e) => e.stopPropagation()}>
         <TradingCard
           id={previewCard.id}
