@@ -1,0 +1,25 @@
+# ACA-Py multitenancy config for VC Trading Cards
+# Used with: aca-start --arg-file /app/argfile.yml
+# See https://aca-py.org/latest/features/Multitenancy/
+
+# Admin API (required for backend to create tenants and list credentials)
+admin:
+  - 0.0.0.0
+  - 8031
+
+# Dev only: no API key required. For production use admin-api-key and set ACAPY_ADMIN_API_KEY in backend.
+admin-insecure-mode: true
+
+# Multitenancy: one wallet per user
+multitenant: true
+multitenant-admin: true
+
+# Required when multitenant is true. Override via env ACAPY_JWT_SECRET in docker run.
+jwt-secret: change-me-use-env-in-production
+
+# No ledger / public DID needed for local wallet-only use
+wallet-type: askar
+wallet-local-did: true
+
+# Log level
+log-level: info

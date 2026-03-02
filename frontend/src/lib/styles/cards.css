@@ -1,0 +1,187 @@
+/* Card base + holographic effects - from pokemon-cards-css / brutality-cards */
+:root {
+  --pointer-x: 50%;
+  --pointer-y: 50%;
+  --card-scale: 1;
+  --card-opacity: 0;
+  --translate-x: 0px;
+  --translate-y: 0px;
+  --rotate-x: 0deg;
+  --rotate-y: 0deg;
+  --background-x: var(--pointer-x);
+  --background-y: var(--pointer-y);
+  --pointer-from-center: 0;
+  --pointer-from-top: var(--pointer-from-center);
+  --pointer-from-left: var(--pointer-from-center);
+  --card-aspect: 0.718;
+  --card-radius: 4.55% / 3.5%;
+  --card-edge: hsl(47, 100%, 78%);
+  --card-back: hsl(205, 100%, 25%);
+  --card-glow: hsl(175, 100%, 90%);
+}
+
+.card {
+  -webkit-transform: translate3d(0px, 0px, 0.01px);
+  transform: translate3d(0px, 0px, 0.01px);
+  pointer-events: none;
+  z-index: calc(var(--card-scale) * 2);
+  contain: layout style paint;
+  will-change: auto;
+  -webkit-transform-style: preserve-3d;
+  transform-style: preserve-3d;
+}
+
+.card, .card * {
+  outline: 1px solid transparent;
+}
+
+.card.fighting { --card-glow: rgb(145, 90, 39); }
+.card.water { --card-glow: hsl(192, 97%, 60%); }
+.card.fire { --card-glow: hsl(9, 81%, 59%); }
+.card.grass { --card-glow: hsl(96, 81%, 65%); }
+
+.card, .card__rotator {
+  aspect-ratio: var(--card-aspect);
+  border-radius: var(--card-radius);
+}
+
+.card.interacting {
+  z-index: calc(var(--card-scale) * 120);
+  will-change: transform;
+  contain: layout style;
+}
+
+.card.active {
+  z-index: 999999 !important;
+  will-change: transform;
+  contain: layout style;
+  isolation: isolate;
+  position: relative;
+}
+
+.card.active .card__translater,
+.card.active .card__rotator,
+.card.active .card__front,
+.card.active .card__back {
+  z-index: 999999 !important;
+}
+
+.card.active .card__translater,
+.card.active .card__rotator {
+  touch-action: none;
+}
+
+.card__translater, .card__rotator {
+  display: grid;
+  perspective: 600px;
+  will-change: auto;
+  transform-origin: center;
+  -webkit-transform-origin: center;
+  transform-style: preserve-3d;
+  contain: layout style;
+}
+
+.card__translater {
+  width: auto;
+  position: relative;
+  -webkit-transform: translate3d(var(--translate-x), var(--translate-y), 0.1px) scale(var(--card-scale));
+  transform: translate3d(var(--translate-x), var(--translate-y), 0.1px) scale(var(--card-scale));
+}
+
+.card__rotator {
+  -webkit-transform: rotateY(var(--rotate-x)) rotateX(var(--rotate-y));
+  transform: rotateY(var(--rotate-x)) rotateX(var(--rotate-y));
+  pointer-events: auto;
+}
+
+button.card__rotator {
+  border: none;
+  background: transparent;
+  padding: 0;
+  appearance: none;
+}
+
+.card__rotator * {
+  width: 100%;
+  display: grid;
+  grid-area: 1/1;
+  aspect-ratio: var(--card-aspect);
+  border-radius: var(--card-radius);
+  transform-style: preserve-3d;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.card__rotator img {
+  height: auto;
+}
+
+.card__back {
+  background-color: var(--card-back);
+  -webkit-transform: rotateY(180deg) translateZ(1px);
+  transform: rotateY(180deg) translateZ(1px);
+  backface-visibility: visible;
+}
+
+.card__front, .card__front * {
+  backface-visibility: hidden;
+}
+
+.card__front {
+  opacity: 1;
+  -webkit-transform: translate3d(0px, 0px, 0.01px);
+  transform: translate3d(0px, 0px, 0.01px);
+}
+
+.card__shine {
+  display: grid;
+  transform: translateZ(1px);
+  overflow: hidden;
+  z-index: 3;
+  background: transparent;
+  filter: brightness(0.85) contrast(2.75) saturate(0.65);
+  mix-blend-mode: color-dodge;
+  opacity: var(--card-opacity);
+}
+
+.card__shine::before,
+.card__shine::after {
+  grid-area: 1/1;
+  transform: translateZ(1px);
+  border-radius: var(--card-radius);
+}
+
+.card__glare {
+  transform: translateZ(1.41px);
+  overflow: hidden;
+  background-image: radial-gradient(
+    farthest-corner circle at var(--pointer-x) var(--pointer-y),
+    hsla(0, 0%, 100%, 0.8) 10%,
+    hsla(0, 0%, 100%, 0.65) 20%,
+    hsla(0, 0%, 0%, 0.5) 90%
+  );
+  opacity: var(--card-opacity);
+  mix-blend-mode: overlay;
+}
+
+/* Full card coverage for trading-cards subtype (no clip) */
+.card[data-subtypes="trading-cards"] .card__shine,
+.card[data-subtypes="trading-cards"] .card__glare {
+  clip-path: none !important;
+}
+
+.card.active .card__rotator,
+.card__rotator:focus {
+  box-shadow:
+    0 0 3px -1px white,
+    0 0 3px 1px var(--card-edge),
+    0 0 12px 2px var(--card-glow),
+    0px 10px 20px -5px black,
+    0 0 40px -30px var(--card-glow),
+    0 0 50px -20px var(--card-glow);
+}
+
+.card__rotator {
+  transition: box-shadow 0.4s ease, opacity 0.33s ease-out;
+  box-shadow: 0px 10px 20px -5px black, 0 2px 15px -5px black;
+}
