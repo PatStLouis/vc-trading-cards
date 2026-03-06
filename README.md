@@ -139,6 +139,13 @@ The backend is trying to connect to the host in `DATABASE_URL` and nothing is re
 - **Frontend** image: static build served with nginx on port 80. When the backend is on a **different origin** (e.g. backend on :8000, frontend on :80), build with `--build-arg VITE_API_URL=http://localhost:8000` so "Log in with Discord" and API calls use the backend URL; otherwise you get "Not found: /auth/discord".
 - **Agent**: see [agent/README.md](agent/README.md); override `ACAPY_JWT_SECRET` at run time.
 
+### Card images (uploads) in production
+
+**Images are not stored in the database.** The DB only stores paths (e.g. `cards/{set_id}/{card_id}.png`). The actual files are written to the backend’s **upload directory** (`UPLOAD_DIR`, default `uploads/`) and served at `/uploads/...`.
+
+- **After deploy, images disappear?** The uploads directory is on the server’s disk. If the backend runs in a new container/VM on each deploy with no persistent volume, that directory is empty. **Fix:** Use a persistent volume (or bind mount) for `UPLOAD_DIR` so the same directory is used across restarts. Example (Docker): `-v ./uploads:/app/uploads` or a named volume.
+- **Images 404 or broken?** The frontend builds image URLs as `VITE_API_URL + '/uploads/' + path`. If the frontend is on a different host than the API (e.g. Vercel + Railway), you **must** set `VITE_API_URL` to your backend’s public URL (e.g. `https://your-api.railway.app`) at **build time** so image requests go to the API. If you use a reverse proxy that serves both the app and the API under one domain and proxy `/api` and `/uploads` to the backend, you can leave `VITE_API_URL` unset (same-origin).
+
 ## Testing
 
 - **Backend** (pytest; no DB/ACA-Py required, tests use mocks):

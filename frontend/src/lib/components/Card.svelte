@@ -20,6 +20,16 @@
   $: subtypesStr = String(subtypes ?? 'trading-cards');
   $: supertypeStr = String(supertype ?? 'trading-card');
   $: rarityStr = String(rarity ?? 'common').toLowerCase().replace(/\s+/g, '-');
+  /** Map rarity to holo effect type for CSS: prismatic | cosmos | beams | gold | reverse | '' (none). */
+  $: holoEffectStr = (() => {
+    const r = rarityStr;
+    if (r === 'common') return '';
+    if (r === 'reverse-holo' || r === 'reverse') return 'reverse';
+    if (r === 'legendary' || r === 'promo') return 'gold';
+    if (r === 'ultra-rare' || r === 'secret-rare' || r === 'galaxy') return 'cosmos';
+    if (r === 'double-rare' || r === 'illustration-rare' || r === 'special') return 'beams';
+    return 'prismatic';
+  })();
 
   const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
   const round = (v: number) => Math.round(v);
@@ -161,6 +171,7 @@
   data-subtypes={subtypesStr}
   data-supertype={supertypeStr}
   data-rarity={rarityStr}
+  data-holo-effect={holoEffectStr}
   data-trainer-gallery={false}
   style={dynamicStyles}
   bind:this={thisCard}

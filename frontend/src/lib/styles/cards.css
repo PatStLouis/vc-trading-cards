@@ -47,7 +47,7 @@
 .card.fire { --card-glow: hsl(9, 81%, 59%); }
 .card.grass { --card-glow: hsl(96, 81%, 65%); }
 
-/* Rarity-based holo intensity (Pokemon-style: common = no foil, rare-holo = full prismatic) */
+/* Rarity-based holo intensity and glow color */
 .card[data-rarity="common"] {
   --holo-intensity: 0;
   --holo-rainbow-opacity: 0;
@@ -63,6 +63,12 @@
   --holo-rainbow-opacity: 0.7;
   --card-glow: hsl(260, 60%, 65%);
 }
+.card[data-rarity="reverse-holo"],
+.card[data-rarity="reverse"] {
+  --holo-intensity: 0.5;
+  --holo-rainbow-opacity: 0.5;
+  --card-glow: hsl(200, 40%, 70%);
+}
 .card[data-rarity="rare-holo"],
 .card[data-rarity="rare-holo-ex"],
 .card[data-rarity="holo"] {
@@ -70,13 +76,25 @@
   --holo-rainbow-opacity: 1;
   --card-glow: hsl(280, 80%, 75%);
 }
+.card[data-rarity="double-rare"],
+.card[data-rarity="illustration-rare"],
+.card[data-rarity="special"] {
+  --holo-intensity: 1;
+  --holo-rainbow-opacity: 0.9;
+  --card-glow: hsl(180, 70%, 70%);
+}
 .card[data-rarity="legendary"],
-.card[data-rarity="ultra-rare"],
-.card[data-rarity="secret-rare"],
 .card[data-rarity="promo"] {
   --holo-intensity: 1;
   --holo-rainbow-opacity: 1;
   --card-glow: hsl(45, 95%, 65%);
+}
+.card[data-rarity="ultra-rare"],
+.card[data-rarity="secret-rare"],
+.card[data-rarity="galaxy"] {
+  --holo-intensity: 1;
+  --holo-rainbow-opacity: 1;
+  --card-glow: hsl(270, 80%, 70%);
 }
 
 .card, .card__rotator {
@@ -199,7 +217,7 @@ button.card__rotator:focus-visible {
   border-radius: var(--card-radius);
 }
 
-/* Prismatic rainbow foil (rarity-driven): diagonal rainbow that shifts with pointer */
+/* Prismatic rainbow foil (default): diagonal rainbow that shifts with pointer */
 .card__shine::before {
   content: "";
   background: linear-gradient(
@@ -219,6 +237,80 @@ button.card__rotator:focus-visible {
   mix-blend-mode: color-dodge;
   opacity: calc(var(--card-opacity) * var(--holo-rainbow-opacity, 0.6));
   pointer-events: none;
+}
+
+/* Gold / legendary: amber–gold metallic shine */
+.card[data-holo-effect="gold"] .card__shine::before {
+  background: linear-gradient(
+    135deg,
+    hsl(35, 90%, 55%) 0%,
+    hsl(48, 95%, 72%) 25%,
+    hsl(52, 100%, 85%) 50%,
+    hsl(45, 90%, 70%) 75%,
+    hsl(30, 85%, 50%) 100%
+  );
+  background-size: 200% 200%;
+  background-position: calc(var(--pointer-x) * 0.5%) calc(var(--pointer-y) * 0.5%);
+}
+
+/* Cosmos / galaxy: deep purple–blue with bright spots */
+.card[data-holo-effect="cosmos"] .card__shine::before {
+  background: radial-gradient(
+    ellipse 80% 80% at calc(var(--pointer-x) * 0.5%) calc(var(--pointer-y) * 0.5%),
+    hsl(280, 70%, 85%) 0%,
+    hsl(260, 60%, 65%) 25%,
+    hsl(240, 50%, 45%) 50%,
+    hsl(220, 60%, 35%) 100%
+  );
+  background-size: 150% 150%;
+  background-position: calc(var(--pointer-x) * 0.3%) calc(var(--pointer-y) * 0.3%);
+}
+.card[data-holo-effect="cosmos"] .card__shine::after {
+  content: "";
+  background: radial-gradient(
+    circle at calc(var(--pointer-x) * 0.4%) calc(var(--pointer-y) * 0.4%),
+    hsla(300, 80%, 90%, 0.6) 0%,
+    transparent 50%
+  );
+  mix-blend-mode: screen;
+  opacity: calc(var(--card-opacity) * var(--holo-rainbow-opacity, 0.6));
+  pointer-events: none;
+}
+
+/* Beams: diagonal beam lines (illustration-rare / special style) */
+.card[data-holo-effect="beams"] .card__shine::before {
+  background: repeating-linear-gradient(
+    105deg,
+    transparent 0deg,
+    transparent 8deg,
+    hsl(190, 70%, 75%) 8deg,
+    hsl(280, 60%, 75%) 12deg,
+    transparent 12deg,
+    transparent 20deg
+  );
+  background-size: 300% 300%;
+  background-position: calc(var(--pointer-x) * 0.6%) calc(var(--pointer-y) * 0.6%);
+}
+.card[data-holo-effect="beams"] .card__shine::after {
+  content: "";
+  background: repeating-linear-gradient(
+    75deg,
+    transparent 0deg,
+    transparent 10deg,
+    hsla(320, 80%, 80%, 0.5) 10deg,
+    transparent 14deg
+  );
+  background-size: 250% 250%;
+  background-position: calc(var(--pointer-y) * -0.4%) calc(var(--pointer-x) * 0.4%);
+  mix-blend-mode: color-dodge;
+  opacity: calc(var(--card-opacity) * var(--holo-rainbow-opacity, 0.5));
+  pointer-events: none;
+}
+
+/* Reverse holo: lighter, subtler prismatic */
+.card[data-holo-effect="reverse"] .card__shine::before {
+  opacity: calc(var(--card-opacity) * var(--holo-rainbow-opacity, 0.5) * 0.7);
+  filter: brightness(1.1);
 }
 
 .card__glare {

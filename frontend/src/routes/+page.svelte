@@ -88,7 +88,7 @@
 
   async function loginPasskey() {
     if (!isWebAuthnAvailable()) {
-      passkeyError = 'Passkeys are not supported in this browser.';
+      passkeyError = 'failed';
       return;
     }
     passkeyError = '';
@@ -98,8 +98,8 @@
       if (data.redirect) {
         window.location.href = data.redirect;
       }
-    } catch (e) {
-      passkeyError = e instanceof Error ? e.message : 'Passkey sign-in failed.';
+    } catch {
+      passkeyError = 'failed';
     } finally {
       passkeyLoading = false;
     }
@@ -158,7 +158,7 @@
           </Button>
         {/if}
         {#if passkeyError}
-          <p class="text-destructive text-sm">{passkeyError}</p>
+          <span class="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium bg-destructive/10 text-destructive/90 border border-destructive/20" role="status">Failed</span>
         {/if}
         <p class="text-xs text-muted-foreground font-mono">
           Your collection, your deck — one account, all your cards

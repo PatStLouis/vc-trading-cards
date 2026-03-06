@@ -38,7 +38,9 @@ export default defineConfig(({ mode }) => {
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback: '/',
-        navigateFallbackDenylist: [/^\/api/, /^\/auth/, /^\/uploads/]
+        navigateFallbackDenylist: [/^\/api/, /^\/auth/, /^\/uploads/],
+        // Ensure "/" is in the precache so createHandlerBoundToURL('/') does not throw (non-precached-url)
+        additionalManifestEntries: [{ url: '/', revision: null }]
       }
     })
   ],

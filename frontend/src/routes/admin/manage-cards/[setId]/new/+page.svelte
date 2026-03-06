@@ -158,10 +158,19 @@
   }
 
   const rarities = [
-    { value: 'common', label: 'Common' },
+    { value: 'common', label: 'Common (no foil)' },
     { value: 'uncommon', label: 'Uncommon' },
     { value: 'rare', label: 'Rare' },
-    { value: 'legendary', label: 'Legendary' },
+    { value: 'reverse-holo', label: 'Reverse Holo' },
+    { value: 'rare-holo', label: 'Rare Holo (prismatic)' },
+    { value: 'double-rare', label: 'Double Rare (beams)' },
+    { value: 'illustration-rare', label: 'Illustration Rare (beams)' },
+    { value: 'legendary', label: 'Legendary (gold)' },
+    { value: 'promo', label: 'Promo (gold)' },
+    { value: 'ultra-rare', label: 'Ultra Rare (cosmos)' },
+    { value: 'secret-rare', label: 'Secret Rare (cosmos)' },
+    { value: 'galaxy', label: 'Galaxy (cosmos)' },
+    { value: 'special', label: 'Special (beams)' },
   ];
 </script>
 

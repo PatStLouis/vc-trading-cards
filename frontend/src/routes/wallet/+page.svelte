@@ -10,7 +10,7 @@
   import { registerPasskey, isWebAuthnAvailable } from '$lib/webauthn';
 
   type SetInfo = { id: string; name: string; card_back_path?: string };
-  let user: { username: string; wallet_id: string; is_admin?: boolean; has_passkey?: boolean } | null = $state(null);
+  let user: { username: string; wallet_id: string; is_admin?: boolean; has_passkey?: boolean; passkey_count?: number } | null = $state(null);
   let cards: Array<Record<string, unknown>> = $state([]);
   let sets: SetInfo[] = $state([]);
   let loading = $state(true);
@@ -112,9 +112,9 @@
     try {
       const data = await registerPasskey();
       passkeyMessage = data.message || 'Passkey added.';
-      user = { ...user, has_passkey: true };
-    } catch (e) {
-      passkeyMessage = e instanceof Error ? e.message : 'Failed to add passkey.';
+      user = { ...user, passkey_count: (user?.passkey_count ?? 0) + 1, has_passkey: true };
+    } catch {
+      passkeyMessage = 'Failed';
     } finally {
       passkeyAdding = false;
     }
@@ -198,15 +198,23 @@
           <Button variant="outline" size="sm" class="rounded-full" onclick={syncCollection} disabled={syncing || cards.length === 0}>
             {syncing ? 'Syncing…' : 'Sync to Explore'}
           </Button>
-          {#if isWebAuthnAvailable() && !user?.has_passkey}
+          {#if isWebAuthnAvailable()}
             <Button variant="outline" size="sm" class="rounded-full" onclick={addPasskey} disabled={passkeyAdding}>
-              {passkeyAdding ? 'Adding…' : 'Add passkey'}
+              {#if passkeyAdding}
+                Adding…
+              {:else if (user?.passkey_count ?? 0) > 0}
+                Add another passkey
+              {:else}
+                Add passkey
+              {/if}
             </Button>
           {/if}
           {#if syncMessage}
             <span class="text-xs text-muted-foreground">{syncMessage}</span>
           {/if}
-          {#if passkeyMessage}
+          {#if passkeyMessage === 'Failed'}
+            <span class="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium bg-destructive/10 text-destructive/90 border border-destructive/20" role="status">Failed</span>
+          {:else if passkeyMessage}
             <span class="text-xs text-muted-foreground">{passkeyMessage}</span>
           {/if}
         </div>

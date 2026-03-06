@@ -24,6 +24,7 @@ async def me(user: dict = Depends(get_current_user)):
         "wallet_id": user.get("wallet_id"),
         "is_admin": is_admin(user),
         "has_passkey": len(creds) > 0,
+        "passkey_count": len(creds),
     }
 
 
