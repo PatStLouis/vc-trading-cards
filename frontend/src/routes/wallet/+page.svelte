@@ -5,20 +5,47 @@
   import * as Card from '$lib/components/ui/card';
   import { Skeleton } from '$lib/components/ui/skeleton';
   import TradingCard from '$lib/components/Card.svelte';
+  import AppIcon from '$lib/components/AppIcon.svelte';
   import { activeCard } from '$lib/stores/activeCard';
+  import { registerPasskey, isWebAuthnAvailable } from '$lib/webauthn';
 
-  let user: { username: string; wallet_id: string; is_admin?: boolean } | null = $state(null);
+  type SetInfo = { id: string; name: string; card_back_path?: string };
+  let user: { username: string; wallet_id: string; is_admin?: boolean; has_passkey?: boolean } | null = $state(null);
   let cards: Array<Record<string, unknown>> = $state([]);
+  let sets: SetInfo[] = $state([]);
   let loading = $state(true);
   let error = $state('');
+  let syncing = $state(false);
+  let syncMessage = $state('');
+  let passkeyAdding = $state(false);
+  let passkeyMessage = $state('');
 
   const API = import.meta.env.VITE_API_URL ?? '';
 
+  function imageUrl(path: string): string {
+    if (!path) return '';
+    const base = (API || '').replace(/\/$/, '');
+    return path.startsWith('/') ? `${base}${path}` : `${base}/uploads/${path}`;
+  }
+  function backUrlForSetName(setName: string): string {
+    const s = sets.find((x) => (x.name || '').trim() === (setName || '').trim());
+    if (s?.card_back_path) return imageUrl(s.card_back_path);
+    return '/card-back.svg';
+  }
+  /** Card image URL: use as-is if full URL, else prepend uploads base (for admin-issued cards). */
+  function cardImageUrl(card: Record<string, unknown>): string {
+    const u = String(card?.image_url ?? card?.artwork ?? '');
+    if (!u) return '';
+    if (u.startsWith('http')) return u;
+    return imageUrl(u);
+  }
+
   onMount(async () => {
     try {
-      const [meRes, credsRes] = await Promise.all([
+      const [meRes, credsRes, setsRes] = await Promise.all([
         fetch(`${API || ''}/api/me`, { credentials: 'include' }),
-        fetch(`${API || ''}/api/wallet/credentials`, { credentials: 'include' })
+        fetch(`${API || ''}/api/wallet/credentials`, { credentials: 'include' }),
+        fetch(`${API || ''}/api/public/sets`)
       ]);
       if (meRes.status === 401) {
         goto('/');
@@ -29,6 +56,10 @@
       if (credsRes.ok) {
         const data = await credsRes.json();
         cards = data.cards || [];
+      }
+      if (setsRes.ok) {
+        const data = await setsRes.json();
+        sets = data.sets || [];
       }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load';
@@ -73,6 +104,55 @@
     await fetch(`${API || ''}/auth/logout`, { method: 'POST', credentials: 'include' });
     goto('/');
   }
+
+  async function addPasskey() {
+    if (!user || passkeyAdding || !isWebAuthnAvailable()) return;
+    passkeyAdding = true;
+    passkeyMessage = '';
+    try {
+      const data = await registerPasskey();
+      passkeyMessage = data.message || 'Passkey added.';
+      user = { ...user, has_passkey: true };
+    } catch (e) {
+      passkeyMessage = e instanceof Error ? e.message : 'Failed to add passkey.';
+    } finally {
+      passkeyAdding = false;
+    }
+  }
+
+  async function syncCollection() {
+    if (!user || syncing) return;
+    syncing = true;
+    syncMessage = '';
+    try {
+      const res = await fetch(`${API || ''}/api/me/collection/sync`, { method: 'POST', credentials: 'include' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        syncMessage = data.message || 'Collection synced. You now appear in Explore.';
+      } else {
+        syncMessage = data.detail || 'Sync failed.';
+      }
+    } catch {
+      syncMessage = 'Sync failed.';
+    } finally {
+      syncing = false;
+    }
+  }
+
+  // Group cards by set for row layout; preserve order of first appearance
+  const cardsBySet = $derived.by(() => {
+    const groups = new Map<string, Array<Record<string, unknown>>>();
+    const order: string[] = [];
+    for (const card of cards) {
+      const set = String(card.set ?? 'Other').trim() || 'Other';
+      if (!groups.has(set)) {
+        groups.set(set, []);
+        order.push(set);
+      }
+      groups.get(set)!.push(card);
+    }
+    return order.map((set) => ({ set, items: groups.get(set)! }));
+  });
 </script>
 
 <main class="wallet-page py-8 px-4 md:py-10 relative">
@@ -82,11 +162,13 @@
     <!-- Header -->
     <header class="wallet-header mb-8 md:mb-10">
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 class="wallet-header__title text-2xl md:text-3xl font-bold tracking-tight">
-            My deck
-          </h1>
-          <p class="wallet-header__tagline text-muted-foreground/80 text-xs mt-0.5">Tritone Cards · The Devil's Interval</p>
+        <div class="flex items-center gap-3">
+          <AppIcon size="lg" class="rounded-xl" />
+          <div>
+            <h1 class="wallet-header__title font-display text-3xl md:text-4xl tracking-tight uppercase">
+              My deck
+            </h1>
+          <p class="wallet-header__tagline text-muted-foreground/80 text-xs mt-0.5">Your deck · Exclusive band collectibles</p>
           {#if user}
             <p class="wallet-header__meta text-muted-foreground text-sm mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <span>@{user.username}</span>
@@ -95,9 +177,11 @@
               </span>
             </p>
           {/if}
+          </div>
         </div>
         <div class="flex items-center gap-2">
           {#if user}
+            <Button variant="ghost" size="sm" href="/search">Explore</Button>
             {#if user.is_admin}
               <Button variant="outline" size="sm" href="/admin">Admin</Button>
             {/if}
@@ -106,9 +190,25 @@
         </div>
       </div>
       {#if !loading && !error && cards.length >= 0}
-        <div class="wallet-header__stat mt-4 inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-4 py-1.5 text-sm font-medium">
-          <span class="wallet-header__stat-dot" aria-hidden="true"></span>
-          {cards.length} {cards.length === 1 ? 'card' : 'cards'}
+        <div class="wallet-header__stat mt-4 flex flex-wrap items-center gap-2">
+          <div class="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-4 py-1.5 text-sm font-medium">
+            <span class="wallet-header__stat-dot" aria-hidden="true"></span>
+            {cards.length} {cards.length === 1 ? 'card' : 'cards'}
+          </div>
+          <Button variant="outline" size="sm" class="rounded-full" onclick={syncCollection} disabled={syncing || cards.length === 0}>
+            {syncing ? 'Syncing…' : 'Sync to Explore'}
+          </Button>
+          {#if isWebAuthnAvailable() && !user?.has_passkey}
+            <Button variant="outline" size="sm" class="rounded-full" onclick={addPasskey} disabled={passkeyAdding}>
+              {passkeyAdding ? 'Adding…' : 'Add passkey'}
+            </Button>
+          {/if}
+          {#if syncMessage}
+            <span class="text-xs text-muted-foreground">{syncMessage}</span>
+          {/if}
+          {#if passkeyMessage}
+            <span class="text-xs text-muted-foreground">{passkeyMessage}</span>
+          {/if}
         </div>
       {/if}
     </header>
@@ -139,26 +239,36 @@
         <Card.Header class="p-0">
         <Card.Title class="text-xl font-semibold">No cards yet</Card.Title>
         <Card.Description class="text-muted-foreground mt-3 max-w-md mx-auto leading-relaxed">
-          Credentials issued to this wallet will show up here as holographic Tritone cards. Get your first credential to start your deck.
+          Cards you collect will show up here as holographic Tritone cards. Get your first card to start building your deck.
         </Card.Description>
         </Card.Header>
       </Card.Root>
     {:else}
-      <section class="card-grid grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-8 py-4" aria-label="Collectible cards">
-        {#each cards as card (card.id)}
-          <TradingCard
-            id={card.id}
-            name={String(card.name ?? 'Card')}
-            number={String(card.number ?? '')}
-            set={String(card.set ?? '')}
-            types={Array.isArray(card.types) ? card.types : [card.types].filter(Boolean)}
-            subtypes={String(card.subtypes ?? 'trading-cards')}
-            supertype={String(card.supertype ?? 'trading-card')}
-            rarity={String(card.rarity ?? 'common')}
-            img={String(card.image_url ?? card.artwork ?? '')}
-          />
+      <div class="wallet-rows space-y-8" aria-label="Collectible cards by set">
+        {#each cardsBySet as { set: setName, items: setCards }}
+          <section class="wallet-row" aria-label="{setName}">
+            <h2 class="wallet-row__title text-lg font-semibold text-foreground mb-3 px-1">{setName}</h2>
+            <div class="wallet-row__scroll flex gap-6 overflow-x-auto overflow-y-hidden pb-2 -mx-1 px-1">
+              {#each setCards as card (card.id)}
+                <div class="wallet-row__card flex-shrink-0 w-[min(280px,75vw)] max-w-[280px]">
+                  <TradingCard
+                    id={card.id}
+                    name={String(card.name ?? 'Card')}
+                    number={String(card.number ?? '')}
+                    set={String(card.set ?? '')}
+                    types={Array.isArray(card.types) ? card.types : [card.types].filter(Boolean)}
+                    subtypes={String(card.subtypes ?? 'trading-cards')}
+                    supertype={String(card.supertype ?? 'trading-card')}
+                    rarity={String(card.rarity ?? 'common')}
+                    img={cardImageUrl(card)}
+                    back={backUrlForSetName(String(card.set ?? ''))}
+                  />
+                </div>
+              {/each}
+            </div>
+          </section>
         {/each}
-      </section>
+      </div>
     {/if}
   </div>
 </main>
@@ -172,12 +282,12 @@
     position: absolute;
     inset: 0;
     background:
-      radial-gradient(ellipse 70% 40% at 50% 0%, oklch(0.22 0.06 264 / 0.4), transparent 60%);
+      radial-gradient(ellipse 70% 40% at 50% 0%, oklch(0.22 0.08 25 / 0.45), transparent 60%);
     pointer-events: none;
   }
 
   .wallet-header__title {
-    font-family: var(--font-heading);
+    font-family: var(--font-display);
   }
 
   .wallet-header__wallet-id {
@@ -194,5 +304,26 @@
 
   .wallet-empty__icon {
     font-family: var(--font-heading);
+  }
+
+  .wallet-row__scroll {
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+  .wallet-row__scroll::-webkit-scrollbar {
+    height: 6px;
+  }
+  .wallet-row__scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .wallet-row__scroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+  }
+  .wallet-row__scroll::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.3);
+  }
+  .wallet-row__card {
+    scroll-snap-align: start;
   }
 </style>

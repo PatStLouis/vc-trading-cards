@@ -42,6 +42,27 @@ class Settings(BaseSettings):
     # Uploads: directory for card images (relative to cwd or absolute). Served at /uploads.
     upload_dir: str = os.getenv("UPLOAD_DIR", "uploads")
 
+    # WebAuthn (passkeys): RP id and origin. Defaults derived from frontend_url.
+    webauthn_rp_id: str = os.getenv("WEBAUTHN_RP_ID", "")  # e.g. localhost or app.example.com
+    webauthn_rp_name: str = os.getenv("WEBAUTHN_RP_NAME", "Tritone Cards")
+    webauthn_origin: str = os.getenv("WEBAUTHN_ORIGIN", "")  # e.g. http://localhost:5175
+
+    @property
+    def webauthn_rp_id_resolved(self) -> str:
+        """Resolve rp_id from env or frontend_url host."""
+        if self.webauthn_rp_id:
+            return self.webauthn_rp_id
+        from urllib.parse import urlparse
+        p = urlparse(self.frontend_url)
+        return (p.hostname or "localhost").lower() or "localhost"
+
+    @property
+    def webauthn_origin_resolved(self) -> str:
+        """Resolve origin from env or frontend_url (no trailing slash)."""
+        if self.webauthn_origin:
+            return self.webauthn_origin.rstrip("/")
+        return self.frontend_url.rstrip("/")
+
     @property
     def discord_authorize_url(self) -> str:
         return "https://discord.com/api/oauth2/authorize"

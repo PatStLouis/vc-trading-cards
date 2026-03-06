@@ -1,16 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import TradingCard from '$lib/components/Card.svelte';
 
   const API = import.meta.env.VITE_API_URL ?? '';
 
-  type CardSet = { id: string; name: string; slug: string; description: string; created_at: string; updated_at: string };
+  type CardSet = { id: string; name: string; slug: string; description: string; set_type?: string; card_back_path?: string; created_at: string; updated_at: string };
   type CardItem = {
     id: string; set_id: string; name: string; number: string; rarity: string;
     set_name: string; quote: string; artwork: string; image_path: string;
+    photograph?: string; artist?: string; band?: string;
     types: string[]; subtypes: string; supertype: string; created_at: string; updated_at: string;
   };
 
@@ -22,102 +24,22 @@
   let error = $state('');
   let success = $state('');
 
-  // View: 'sets' | 'cards' — dynamic, no stacked columns
   let view: 'sets' | 'cards' = $state('sets');
 
-  // Modals
   let showCreateSet = $state(false);
-  let showAddCard = $state(false);
   let previewCard: CardItem | null = $state(null);
+  let issueCard: CardItem | null = $state(null);
+  let issueUsers: { discord_sub: string; discord_username: string; wallet_id: string }[] = $state([]);
+  let issueUsersLoading = $state(false);
+  let issueTargetSub = $state('');
+  let issueSubmitting = $state(false);
+  let issueError = $state('');
 
-  // Create set form
   let newSetName = $state('');
   let newSetDescription = $state('');
+  let newSetType = $state('');
+  let newSetBackFile: File | null = $state(null);
   let creatingSet = $state(false);
-
-  // Add card form (simplified: name, rarity, set name disabled, image)
-  let cardName = $state('');
-  let cardRarity = $state('common');
-  let cardImageFile: File | null = $state(null);
-  let addingCard = $state(false);
-  let imagePreviewUrl = $state('');
-
-  // Camera
-  let showCamera = $state(false);
-  let cameraError = $state('');
-  let videoEl: HTMLVideoElement | null = $state(null);
-  let mediaStream: MediaStream | null = $state(null);
-
-  function setCardImageFile(file: File | null) {
-    if (imagePreviewUrl) URL.revokeObjectURL(imagePreviewUrl);
-    imagePreviewUrl = '';
-    cardImageFile = file;
-    if (file) imagePreviewUrl = URL.createObjectURL(file);
-  }
-
-  function openTakePicture() {
-    setCardImageFile(null);
-    const input = document.getElementById('card-image') as HTMLInputElement;
-    if (input) input.value = '';
-    cameraError = '';
-    showCamera = true;
-  }
-
-  function stopCamera() {
-    if (mediaStream) {
-      mediaStream.getTracks().forEach((t) => t.stop());
-      mediaStream = null;
-    }
-    if (videoEl) videoEl.srcObject = null;
-    // Do not set videoEl = null here — the $effect cleanup runs when videoEl is first set and would clear the ref before startCamera() runs.
-  }
-
-  function startCamera() {
-    if (mediaStream || !videoEl) return;
-    cameraError = '';
-    navigator.mediaDevices.getUserMedia({ video: true })
-      .then((stream) => {
-        mediaStream = stream;
-        if (videoEl) {
-          videoEl.srcObject = stream;
-          const p = videoEl.play();
-          if (p !== undefined) p.catch(() => {});
-        }
-      })
-      .catch((e) => {
-        cameraError = e.message || 'Camera access denied';
-        showCamera = false;
-      });
-  }
-
-  function capturePhoto() {
-    if (!videoEl || !mediaStream) return;
-    const w = videoEl.videoWidth;
-    const h = videoEl.videoHeight;
-    if (!w || !h) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(videoEl, 0, 0);
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) return;
-        setCardImageFile(new File([blob], 'capture.png', { type: 'image/png' }));
-        stopCamera();
-        showCamera = false;
-      },
-      'image/png'
-    );
-  }
-
-  $effect(() => {
-    if (showCamera && showAddCard && videoEl) {
-      startCamera();
-      return () => stopCamera();
-    }
-  });
 
   onMount(async () => {
     try {
@@ -137,6 +59,15 @@
       if (!setsRes.ok) throw new Error('Failed to load sets');
       const data = await setsRes.json();
       sets = data.sets || [];
+      const setParam = $page.url.searchParams.get('set');
+      if (setParam) {
+        const s = sets.find((x) => x.id === setParam);
+        if (s) {
+          selectedSet = s;
+          await loadCards(s.id);
+          view = 'cards';
+        }
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load';
     } finally {
@@ -167,6 +98,8 @@
     showCreateSet = true;
     newSetName = '';
     newSetDescription = '';
+    newSetType = '';
+    newSetBackFile = null;
   }
 
   async function createSet() {
@@ -179,6 +112,8 @@
       form.append('name', newSetName.trim());
       form.append('slug', '');
       form.append('description', newSetDescription.trim());
+      form.append('set_type', newSetType.trim());
+      if (newSetBackFile) form.append('card_back', newSetBackFile);
       const res = await fetch(`${API}/api/admin/sets`, {
         method: 'POST',
         credentials: 'include',
@@ -199,67 +134,99 @@
     }
   }
 
-  function openAddCard() {
-    if (!selectedSet) return;
-    cardName = '';
-    cardRarity = 'common';
-    setCardImageFile(null);
-    showCamera = false;
-    showAddCard = true;
-  }
-
-  async function addCard() {
-    if (!selectedSet || !cardName.trim()) return;
-    addingCard = true;
-    error = '';
-    success = '';
-    try {
-      const form = new FormData();
-      form.append('name', cardName.trim());
-      form.append('number', '');
-      form.append('rarity', cardRarity);
-      form.append('set_name', selectedSet.name);
-      form.append('quote', '');
-      form.append('artwork', '');
-      form.append('types', 'TradingCard');
-      form.append('subtypes', 'trading-cards');
-      form.append('supertype', 'trading-card');
-      if (cardImageFile) form.append('image', cardImageFile);
-      const res = await fetch(`${API}/api/admin/sets/${selectedSet.id}/cards`, {
-        method: 'POST',
-        credentials: 'include',
-        body: form,
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'Failed to add card');
-      }
-      const created = await res.json();
-      cards = [...cards, created];
-      showAddCard = false;
-      success = 'Card added.';
-    } catch (e) {
-      error = e instanceof Error ? e.message : 'Failed to add card';
-    } finally {
-      addingCard = false;
-    }
-  }
-
   function imageUrl(path: string): string {
     if (!path) return '';
     const base = API.replace(/\/$/, '');
     return path.startsWith('/') ? `${base}${path}` : `${base}/uploads/${path}`;
   }
 
+  function setBackUrl(set: CardSet): string {
+    if (set.card_back_path) return imageUrl(set.card_back_path);
+    return '/card-back.svg';
+  }
+
   function closeCreateSet() {
     showCreateSet = false;
   }
 
-  function closeAddCard() {
-    showAddCard = false;
-    showCamera = false;
-    stopCamera();
-    videoEl = null;
+  async function deleteSet(setId: string, setName: string) {
+    if (!confirm(`Delete the set "${setName}"? This will also delete all cards in the set.`)) return;
+    error = '';
+    success = '';
+    try {
+      const res = await fetch(`${API}/api/admin/sets/${setId}`, { method: 'DELETE', credentials: 'include' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to delete set');
+      }
+      sets = sets.filter((x) => x.id !== setId);
+      if (selectedSet?.id === setId) {
+        backToSets();
+      }
+      success = 'Set deleted.';
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to delete set';
+    }
+  }
+
+  async function deleteCard(c: CardItem) {
+    if (!confirm(`Delete the card "${c.name}"?`)) return;
+    error = '';
+    success = '';
+    try {
+      const res = await fetch(`${API}/api/admin/cards/${c.id}`, { method: 'DELETE', credentials: 'include' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to delete card');
+      }
+      if (selectedSet) await loadCards(selectedSet.id);
+      success = 'Card deleted.';
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to delete card';
+    }
+  }
+
+  function openIssueModal(c: CardItem) {
+    issueCard = c;
+    issueTargetSub = '';
+    issueError = '';
+    issueUsers = [];
+    issueUsersLoading = true;
+    fetch(`${API}/api/admin/users`, { credentials: 'include' })
+      .then((r) => r.ok ? r.json() : { users: [] })
+      .then((data) => { issueUsers = data.users || []; })
+      .catch(() => { issueUsers = []; })
+      .finally(() => { issueUsersLoading = false; });
+  }
+
+  function closeIssueModal() {
+    issueCard = null;
+    issueTargetSub = '';
+    issueError = '';
+  }
+
+  async function submitIssue() {
+    if (!issueCard || !issueTargetSub.trim()) return;
+    issueSubmitting = true;
+    issueError = '';
+    try {
+      const res = await fetch(`${API}/api/admin/cards/${issueCard.id}/issue`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ discord_sub: issueTargetSub.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.detail || (Array.isArray(data.detail) ? data.detail[0]?.msg : 'Failed to issue'));
+      }
+      success = `Card "${issueCard.name}" issued to user.`;
+      closeIssueModal();
+    } catch (e) {
+      issueError = e instanceof Error ? e.message : 'Failed to issue card';
+    } finally {
+      issueSubmitting = false;
+    }
   }
 
   // When preview modal is open, lock body scroll and prevent touch from scrolling the background
@@ -276,96 +243,173 @@
   });
 </script>
 
-<main class="manage-cards-page py-4 px-3 sm:py-6 sm:px-4">
-  <!-- Header -->
-  <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+<main class="manage-cards-page">
+  <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5">
     <div class="flex items-center gap-2">
       {#if view === 'cards' && selectedSet}
-        <Button variant="ghost" size="icon-sm" onclick={backToSets} aria-label="Back to sets">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        <Button variant="ghost" size="icon-sm" class="text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700" onclick={backToSets} aria-label="Back to sets">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
         </Button>
         <div>
-          <h1 class="text-xl font-semibold">{selectedSet.name}</h1>
-          <p class="text-muted-foreground text-sm">{cards.length} cards</p>
+          <h1 class="text-lg font-semibold text-neutral-100">{selectedSet.name}</h1>
+          <p class="text-neutral-400 text-sm">{cards.length} cards</p>
         </div>
       {:else}
         <div>
-          <h1 class="text-xl font-semibold">Manage Cards</h1>
-          <p class="text-muted-foreground text-sm">Sets and collections</p>
+          <h1 class="text-lg font-semibold text-neutral-100">Cards</h1>
+          <p class="text-neutral-400 text-sm">Sets and collections</p>
         </div>
       {/if}
     </div>
     <div class="flex gap-2">
       {#if view === 'sets'}
-        <Button size="sm" onclick={openCreateSet}>New set</Button>
+        <Button size="sm" class="h-9 text-sm" onclick={openCreateSet}>New set</Button>
       {:else if selectedSet}
-        <Button size="sm" onclick={openAddCard}>Add card</Button>
+        <a href="/admin/manage-cards/{selectedSet.id}/new">
+          <Button size="sm" class="h-9 text-sm">Add card</Button>
+        </a>
+        <Button variant="outline" size="sm" class="h-9 text-sm border-red-500/50 text-red-400 hover:bg-red-500/10" onclick={() => deleteSet(selectedSet.id, selectedSet.name)}>
+          Delete set
+        </Button>
       {/if}
-      <Button variant="outline" size="sm" href="/admin">Admin</Button>
-      <Button variant="outline" size="sm" href="/wallet">Wallet</Button>
     </div>
   </header>
 
   {#if error}
-    <div class="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">{error}</div>
+    <div class="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-400 text-sm">{error}</div>
   {/if}
   {#if success}
-    <div class="mb-4 p-3 rounded-lg bg-green-500/10 text-green-700 dark:text-green-400 text-sm">{success}</div>
+    <div class="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-emerald-400 text-sm">{success}</div>
   {/if}
 
   {#if loading}
-    <div class="py-12 text-center text-muted-foreground">Loading…</div>
+    <div class="py-12 text-center text-neutral-500 text-sm">Loading…</div>
   {:else if view === 'sets'}
-    <!-- Sets list -->
-    <ul class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <ul class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 justify-items-center">
       {#each sets as s}
-        <li>
+        <li class="relative group w-full max-w-[280px]">
           <button
             type="button"
-            class="w-full text-left p-4 rounded-xl border border-border bg-card hover:bg-muted/50 transition-colors"
+            class="cursor-pointer w-full text-left block rounded-[4.55%_/_3.5%] overflow-hidden border border-neutral-700 bg-neutral-800 shadow-lg hover:border-neutral-500 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:ring-offset-2 focus:ring-offset-neutral-900"
             onclick={() => openSet(s)}
           >
-            <span class="font-medium">{s.name}</span>
-            <span class="text-muted-foreground text-sm block mt-0.5">{s.slug}</span>
+            <div class="aspect-[0.718] w-full rounded-[4.55%_/_3.5%] overflow-hidden bg-neutral-800">
+              <img
+                src={setBackUrl(s)}
+                alt=""
+                class="w-full h-full object-cover object-center"
+              />
+            </div>
+          </button>
+          <div class="mt-2 px-0.5 text-center">
+            <span class="font-medium text-neutral-100 block truncate">{s.name}</span>
+            <span class="text-neutral-400 text-xs block truncate">{s.slug}</span>
+          </div>
+          <button
+            type="button"
+            class="absolute -top-1 -right-1 p-1.5 rounded-full bg-neutral-800 border border-neutral-600 text-neutral-400 hover:text-red-400 hover:bg-red-500/20 hover:border-red-500/50 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+            onclick={(e) => { e.stopPropagation(); e.preventDefault(); deleteSet(s.id, s.name); }}
+            aria-label="Delete set {s.name}"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
           </button>
         </li>
       {/each}
     </ul>
     {#if sets.length === 0}
-      <div class="py-12 text-center text-muted-foreground rounded-xl border border-dashed border-border">
-        <p class="mb-4">No sets yet.</p>
+      <div class="py-16 text-center text-neutral-400 rounded-xl border border-dashed border-neutral-700">
+        <p class="mb-4 text-sm">No sets yet.</p>
         <Button onclick={openCreateSet}>Create your first set</Button>
       </div>
     {/if}
   {:else if view === 'cards' && selectedSet}
-    <!-- Cards list with Preview -->
     {#if cards.length === 0}
-      <div class="py-12 text-center text-muted-foreground rounded-xl border border-dashed border-border">
-        <p class="mb-4">No cards in this set.</p>
-        <Button onclick={openAddCard}>Add a card</Button>
+      <div class="py-16 text-center text-neutral-400 rounded-xl border border-dashed border-neutral-700">
+        <p class="mb-4 text-sm">No cards in this set.</p>
+        <a href="/admin/manage-cards/{selectedSet.id}/new">
+          <Button>Add a card</Button>
+        </a>
       </div>
     {:else}
-      <ul class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+      <ul class="grid gap-5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {#each cards as c}
-          <li class="flex flex-col rounded-xl border border-border bg-card overflow-hidden">
-            <div class="aspect-[0.718] w-full bg-muted/30 flex items-center justify-center shrink-0">
+          <li class="flex flex-col rounded-xl border border-neutral-700 bg-neutral-800/80 overflow-hidden hover:border-neutral-500 hover:shadow-md transition-all cursor-default">
+            <div class="aspect-[0.718] w-full bg-neutral-800 flex items-center justify-center shrink-0">
               {#if c.image_path}
                 <img src={imageUrl(c.image_path)} alt={c.name} class="w-full h-full object-contain" />
               {:else}
-                <span class="text-muted-foreground text-sm">No image</span>
+                <span class="text-neutral-500 text-sm">No image</span>
               {/if}
             </div>
-            <div class="p-3 flex flex-col gap-2 flex-1">
-              <span class="font-medium truncate">{c.name}</span>
-              <span class="text-muted-foreground text-xs capitalize">{c.rarity}</span>
-              <Button variant="outline" size="sm" class="w-full mt-auto" onclick={() => (previewCard = c)}>
-                Preview
-              </Button>
+            <div class="p-4 flex flex-col gap-2 flex-1 min-w-0">
+              <span class="font-medium text-neutral-100 truncate">{c.name}</span>
+              <span class="text-neutral-400 text-sm capitalize">{c.rarity}</span>
+              <div class="grid grid-cols-2 gap-2 mt-auto">
+                <Button variant="outline" size="sm" class="w-full min-w-0 border-neutral-600 text-neutral-200 hover:bg-neutral-700" onclick={() => (previewCard = c)}>
+                  Preview
+                </Button>
+                <Button variant="outline" size="sm" class="w-full min-w-0 border-primary/50 text-primary hover:bg-primary/10" onclick={() => openIssueModal(c)} title="Issue this card to a user">
+                  Issue
+                </Button>
+                <a href="/admin/manage-cards/{selectedSet.id}/{c.id}/edit" class="min-w-0">
+                  <Button variant="outline" size="sm" class="w-full min-w-0 border-neutral-600 text-neutral-200 hover:bg-neutral-700">
+                    Edit
+                  </Button>
+                </a>
+                <Button variant="outline" size="sm" class="w-full min-w-0 border-red-500/50 text-red-400 hover:bg-red-500/10" onclick={() => deleteCard(c)} title="Delete card" aria-label="Delete {c.name}">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="shrink-0"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                </Button>
+              </div>
             </div>
           </li>
         {/each}
       </ul>
     {/if}
+  {/if}
+
+  <!-- Modal: Issue card to user -->
+  {#if issueCard}
+    <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="issue-card-title">
+      <div class="absolute inset-0 bg-black/60" onclick={closeIssueModal}></div>
+      <div class="relative w-full max-w-md bg-card border border-border rounded-t-2xl sm:rounded-2xl shadow-xl p-6 max-h-[90vh] overflow-y-auto" onclick={(e) => e.stopPropagation()}>
+        <h2 id="issue-card-title" class="text-lg font-semibold mb-1">Issue card to user</h2>
+        <p class="text-muted-foreground text-sm mb-4">Issue “{issueCard.name}” to a registered user. They will see it in their deck immediately.</p>
+        {#if issueError}
+          <p class="text-red-400 text-sm mb-3">{issueError}</p>
+        {/if}
+        <div class="space-y-4">
+          <div>
+            <label for="issue-user" class="block text-sm font-medium mb-1">User</label>
+            {#if issueUsersLoading}
+              <p class="text-muted-foreground text-sm">Loading users…</p>
+            {:else}
+              <select
+                id="issue-user"
+                class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground"
+                bind:value={issueTargetSub}
+                disabled={issueUsers.length === 0}
+              >
+                <option value="">Select a user…</option>
+                {#each issueUsers as u}
+                  <option value={u.discord_sub}>
+                    {u.discord_username || u.discord_sub} ({u.wallet_id?.slice(0, 12) ?? '—'}…)
+                  </option>
+                {/each}
+              </select>
+              {#if issueUsers.length === 0 && !issueUsersLoading}
+                <p class="text-muted-foreground text-xs mt-1">No users yet. Users appear after they log in with Discord.</p>
+              {/if}
+            {/if}
+          </div>
+          <div class="flex gap-2 pt-2">
+            <Button onclick={submitIssue} disabled={issueSubmitting || !issueTargetSub.trim() || issueUsersLoading}>
+              {issueSubmitting ? 'Issuing…' : 'Issue'}
+            </Button>
+            <Button variant="outline" onclick={closeIssueModal} disabled={issueSubmitting}>Cancel</Button>
+          </div>
+        </div>
+      </div>
+    </div>
   {/if}
 
   <!-- Modal: Create set -->
@@ -381,85 +425,29 @@
             <input id="set-name" type="text" bind:value={newSetName} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="e.g. Genesis" />
           </div>
           <div>
+            <label for="set-type" class="block text-sm font-medium mb-1">Set type</label>
+            <input id="set-type" type="text" bind:value={newSetType} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="e.g. Trading Card, Collectible" />
+          </div>
+          <div>
             <label for="set-desc" class="block text-sm font-medium mb-1">Description (optional)</label>
             <textarea id="set-desc" bind:value={newSetDescription} rows="2" class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Optional"></textarea>
+          </div>
+          <div>
+            <label for="set-back" class="block text-sm font-medium mb-1">Card back image (optional)</label>
+            <input
+              id="set-back"
+              type="file"
+              accept=".png,.svg,.jpg,.jpeg,.webp,image/png,image/svg+xml,image/jpeg,image/webp"
+              class="w-full text-sm file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground"
+              onchange={(e) => { newSetBackFile = (e.target as HTMLInputElement).files?.[0] ?? null; }}
+            />
+            <p class="text-muted-foreground text-xs mt-0.5">PNG, SVG, JPG, or WebP. Used as the back of cards in this set.</p>
           </div>
           <div class="flex gap-2 pt-2">
             <Button onclick={createSet} disabled={creatingSet || !newSetName.trim()}>
               {creatingSet ? 'Creating…' : 'Create'}
             </Button>
             <Button variant="outline" onclick={closeCreateSet}>Cancel</Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  {/if}
-
-  <!-- Modal: Add card (simplified) -->
-  {#if showAddCard && selectedSet}
-    <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="add-card-title">
-      <div class="absolute inset-0 bg-black/60" onclick={closeAddCard}></div>
-      <div class="relative w-full max-w-md bg-card border border-border rounded-t-2xl sm:rounded-2xl shadow-xl p-6 max-h-[90vh] overflow-y-auto" onclick={(e) => e.stopPropagation()}>
-        <h2 id="add-card-title" class="text-lg font-semibold mb-4">Add card</h2>
-        <div class="space-y-4">
-          <div>
-            <label for="card-name" class="block text-sm font-medium mb-1">Name *</label>
-            <input id="card-name" type="text" bind:value={cardName} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Card name" />
-          </div>
-          <div>
-            <label for="card-rarity" class="block text-sm font-medium mb-1">Rarity</label>
-            <select id="card-rarity" bind:value={cardRarity} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
-              <option value="common">common</option>
-              <option value="uncommon">uncommon</option>
-              <option value="rare">rare</option>
-              <option value="legendary">legendary</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Set</label>
-            <input type="text" value={selectedSet.name} disabled class="w-full rounded-md border border-input bg-muted/50 px-3 py-2 text-sm text-muted-foreground cursor-not-allowed" />
-          </div>
-          <div>
-            <label class="block text-sm font-medium mb-1">Image (PNG)</label>
-            <div class="flex flex-wrap gap-2 items-center">
-              <input
-                id="card-image"
-                type="file"
-                accept=".png,image/png"
-                class="text-sm file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground"
-                onchange={(e) => { setCardImageFile((e.target as HTMLInputElement).files?.[0] ?? null); showCamera = false; }}
-              />
-              <span class="text-muted-foreground text-xs">or</span>
-              <Button type="button" variant="outline" size="sm" onclick={openTakePicture}>Take picture</Button>
-            </div>
-            {#if showCamera}
-              <div class="mt-3 p-3 rounded-lg border border-border bg-muted/30 space-y-2">
-                {#if cameraError}
-                  <p class="text-sm text-destructive">{cameraError}</p>
-                {:else}
-                  <div class="rounded-lg overflow-hidden bg-black max-w-full min-h-[180px]">
-                    <video bind:this={videoEl} autoplay playsinline muted class="block w-full min-h-[180px] max-h-40 object-cover"></video>
-                  </div>
-                  <div class="flex gap-2">
-                    <Button type="button" size="sm" onclick={capturePhoto}>Capture</Button>
-                    <Button type="button" variant="outline" size="sm" onclick={() => { stopCamera(); showCamera = false; }}>Cancel</Button>
-                  </div>
-                {/if}
-              </div>
-            {/if}
-            {#if cardImageFile && !showCamera}
-              <div class="mt-2 flex items-center gap-2">
-                <img src={imagePreviewUrl} alt="Preview" class="h-14 w-14 object-contain rounded border border-border" />
-                <span class="text-sm text-muted-foreground truncate flex-1">{cardImageFile.name}</span>
-                <Button type="button" variant="ghost" size="sm" onclick={() => { setCardImageFile(null); (document.getElementById('card-image') as HTMLInputElement).value = ''; }}>Clear</Button>
-              </div>
-            {/if}
-          </div>
-          <div class="flex gap-2 pt-2">
-            <Button onclick={addCard} disabled={addingCard || !cardName.trim()}>
-              {addingCard ? 'Adding…' : 'Add card'}
-            </Button>
-            <Button variant="outline" onclick={closeAddCard}>Cancel</Button>
           </div>
         </div>
       </div>
@@ -485,6 +473,7 @@
           supertype={previewCard.supertype || 'trading-card'}
           rarity={previewCard.rarity}
           img={previewCard.image_path ? imageUrl(previewCard.image_path) : ''}
+          back={selectedSet ? setBackUrl(selectedSet) : '/card-back.svg'}
         />
       </div>
       <button
@@ -501,7 +490,6 @@
 
 <style>
   .manage-cards-page {
-    max-width: 1200px;
-    margin: 0 auto;
+    width: 100%;
   }
 </style>

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 import secrets
 
 from app.auth.discord import get_authorize_url, exchange_code_for_tokens, get_discord_user
@@ -26,6 +26,14 @@ async def discord_login(request: Request):
     # In production store state in cache/redis and validate in callback
     url = get_authorize_url(state)
     return RedirectResponse(url=url, status_code=302)
+
+
+@router.get("/discord/url")
+async def discord_authorize_url():
+    """Return the Discord OAuth2 authorize URL for client-side redirect or mobile intent."""
+    state = secrets.token_urlsafe(32)
+    url = get_authorize_url(state)
+    return JSONResponse(content={"url": url})
 
 
 @router.get("/redirect-uri")

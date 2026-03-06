@@ -76,3 +76,34 @@ async def list_credentials(tenant_token: str | None) -> list:
             return data.get("results", [])
         except Exception:
             return []
+
+
+async def agent_status() -> dict:
+    """Return agent (ACA-Py) status for admin: reachable, version if available. No secrets."""
+    if not _settings.acapy_admin_url.strip():
+        return {"configured": False, "reachable": False, "detail": "ACAPY_ADMIN_URL not set"}
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        headers = {}
+        if _settings.acapy_admin_api_key:
+            headers["X-API-Key"] = _settings.acapy_admin_api_key
+        try:
+            r = await client.get(
+                f"{_settings.acapy_admin_url.rstrip('/')}/status",
+                headers=headers,
+            )
+            r.raise_for_status()
+            data = r.json() if r.content else {}
+            return {
+                "configured": True,
+                "reachable": True,
+                "version": data.get("version"),
+                "label": data.get("label"),
+            }
+        except httpx.ConnectError:
+            return {"configured": True, "reachable": False, "detail": "Connection refused or unreachable"}
+        except httpx.TimeoutException:
+            return {"configured": True, "reachable": False, "detail": "Connection timed out"}
+        except httpx.HTTPStatusError as e:
+            return {"configured": True, "reachable": True, "detail": f"Agent returned {e.response.status_code}"}
+        except Exception as e:
+            return {"configured": True, "reachable": False, "detail": str(e)}

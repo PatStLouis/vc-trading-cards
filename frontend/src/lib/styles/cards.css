@@ -15,9 +15,11 @@
   --pointer-from-left: var(--pointer-from-center);
   --card-aspect: 0.718;
   --card-radius: 4.55% / 3.5%;
-  --card-edge: hsl(47, 100%, 78%);
-  --card-back: hsl(205, 100%, 25%);
-  --card-glow: hsl(175, 100%, 90%);
+  --card-edge: hsl(0, 70%, 55%);
+  --card-back: hsl(0, 30%, 12%);
+  --card-glow: hsl(0, 80%, 75%);
+  --holo-intensity: 0.5;
+  --holo-rainbow-opacity: 0.6;
 }
 
 .card {
@@ -31,14 +33,51 @@
   transform-style: preserve-3d;
 }
 
+/* Avoid rectangular focus ring; we use box-shadow for focus instead */
 .card, .card * {
-  outline: 1px solid transparent;
+  outline: none;
+}
+.card:focus-visible,
+.card *:focus-visible {
+  outline: none;
 }
 
 .card.fighting { --card-glow: rgb(145, 90, 39); }
 .card.water { --card-glow: hsl(192, 97%, 60%); }
 .card.fire { --card-glow: hsl(9, 81%, 59%); }
 .card.grass { --card-glow: hsl(96, 81%, 65%); }
+
+/* Rarity-based holo intensity (Pokemon-style: common = no foil, rare-holo = full prismatic) */
+.card[data-rarity="common"] {
+  --holo-intensity: 0;
+  --holo-rainbow-opacity: 0;
+  --card-glow: hsl(0, 0%, 45%);
+}
+.card[data-rarity="uncommon"] {
+  --holo-intensity: 0.35;
+  --holo-rainbow-opacity: 0.4;
+  --card-glow: hsl(180, 25%, 55%);
+}
+.card[data-rarity="rare"] {
+  --holo-intensity: 0.65;
+  --holo-rainbow-opacity: 0.7;
+  --card-glow: hsl(260, 60%, 65%);
+}
+.card[data-rarity="rare-holo"],
+.card[data-rarity="rare-holo-ex"],
+.card[data-rarity="holo"] {
+  --holo-intensity: 1;
+  --holo-rainbow-opacity: 1;
+  --card-glow: hsl(280, 80%, 75%);
+}
+.card[data-rarity="legendary"],
+.card[data-rarity="ultra-rare"],
+.card[data-rarity="secret-rare"],
+.card[data-rarity="promo"] {
+  --holo-intensity: 1;
+  --holo-rainbow-opacity: 1;
+  --card-glow: hsl(45, 95%, 65%);
+}
 
 .card, .card__rotator {
   aspect-ratio: var(--card-aspect);
@@ -99,6 +138,15 @@ button.card__rotator {
   background: transparent;
   padding: 0;
   appearance: none;
+  overflow: hidden;
+  border-radius: var(--card-radius);
+  outline: none;
+}
+button.card__rotator:focus {
+  outline: none;
+}
+button.card__rotator:focus-visible {
+  outline: none;
 }
 
 .card__rotator * {
@@ -141,7 +189,7 @@ button.card__rotator {
   background: transparent;
   filter: brightness(0.85) contrast(2.75) saturate(0.65);
   mix-blend-mode: color-dodge;
-  opacity: var(--card-opacity);
+  opacity: calc(var(--card-opacity) * var(--holo-intensity, 0.5));
 }
 
 .card__shine::before,
@@ -149,6 +197,28 @@ button.card__rotator {
   grid-area: 1/1;
   transform: translateZ(1px);
   border-radius: var(--card-radius);
+}
+
+/* Prismatic rainbow foil (rarity-driven): diagonal rainbow that shifts with pointer */
+.card__shine::before {
+  content: "";
+  background: linear-gradient(
+    125deg,
+    hsl(0, 80%, 70%) 0%,
+    hsl(30, 90%, 70%) 12%,
+    hsl(55, 95%, 72%) 25%,
+    hsl(120, 70%, 65%) 38%,
+    hsl(190, 85%, 65%) 50%,
+    hsl(250, 75%, 70%) 62%,
+    hsl(300, 80%, 72%) 75%,
+    hsl(330, 85%, 70%) 88%,
+    hsl(0, 80%, 70%) 100%
+  );
+  background-size: 220% 220%;
+  background-position: calc(var(--pointer-x) * 0.4%) calc(var(--pointer-y) * 0.4%);
+  mix-blend-mode: color-dodge;
+  opacity: calc(var(--card-opacity) * var(--holo-rainbow-opacity, 0.6));
+  pointer-events: none;
 }
 
 .card__glare {
@@ -160,7 +230,7 @@ button.card__rotator {
     hsla(0, 0%, 100%, 0.65) 20%,
     hsla(0, 0%, 0%, 0.5) 90%
   );
-  opacity: var(--card-opacity);
+  opacity: calc(var(--card-opacity) * var(--holo-intensity, 0.5));
   mix-blend-mode: overlay;
 }
 
@@ -171,7 +241,7 @@ button.card__rotator {
 }
 
 .card.active .card__rotator,
-.card__rotator:focus {
+.card__rotator:focus-visible {
   box-shadow:
     0 0 3px -1px white,
     0 0 3px 1px var(--card-edge),
@@ -180,8 +250,12 @@ button.card__rotator {
     0 0 40px -30px var(--card-glow),
     0 0 50px -20px var(--card-glow);
 }
+/* When focused by click (not keyboard), avoid double glow unless card is active */
+.card:not(.active) .card__rotator:focus:not(:focus-visible) {
+  box-shadow: none;
+}
 
 .card__rotator {
   transition: box-shadow 0.4s ease, opacity 0.33s ease-out;
-  box-shadow: 0px 10px 20px -5px black, 0 2px 15px -5px black;
+  box-shadow: none;
 }

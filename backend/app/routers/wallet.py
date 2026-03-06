@@ -2,28 +2,37 @@
 from fastapi import APIRouter, Depends
 from app.dependencies import get_current_user, get_tenant_token_for_request
 from app.services.acapy import list_credentials
+from app.db import (
+    get_card_id_by_set_and_name,
+    sync_user_collection,
+    list_admin_issued_for_user,
+    webauthn_list_credentials_for_user,
+    get_admin_issued_card_ids,
+)
 
 router = APIRouter(tags=["Wallet"], prefix="/api")
 
 
 @router.get("/me")
 async def me(user: dict = Depends(get_current_user)):
-    """Return current user info from session. Includes is_admin when user is in ADMIN_DISCORD_IDS."""
+    """Return current user info from session. Includes is_admin and has_passkey."""
     from app.dependencies import is_admin
+    creds = await webauthn_list_credentials_for_user(user["sub"])
     return {
         "sub": user.get("sub"),
         "username": user.get("username"),
         "wallet_id": user.get("wallet_id"),
         "is_admin": is_admin(user),
+        "has_passkey": len(creds) > 0,
     }
 
 
 @router.get("/wallet/credentials")
 async def wallet_credentials(
-    _user: dict = Depends(get_current_user),
+    user: dict = Depends(get_current_user),
     tenant_token: str | None = Depends(get_tenant_token_for_request),
 ):
-    """List W3C credentials in the user's ACA-Py wallet (POST agent /credentials/w3c). Normalize to card-like shape for frontend."""
+    """List W3C credentials in the user's ACA-Py wallet (POST agent /credentials/w3c). Normalize to card-like shape for frontend. Also includes admin-issued cards."""
     raw = await list_credentials(tenant_token)
     # Agent returns W3C credentials: each item may be { credential_id, credential: { ... } } or raw W3C { credentialSubject, ... }
     cards = []
@@ -73,6 +82,40 @@ async def wallet_credentials(
                     "types": ["TradingCard"],
                     "subtypes": "trading-cards",
                     "supertype": "trading-card",
-                    "image_url": "",
-                })
+                "image_url": "",
+            })
+    # Merge admin-issued cards (issued by admin to this user) so they appear in the wallet
+    issued = await list_admin_issued_for_user(user["sub"])
+    for card in issued:
+        cards.append(card)
     return {"cards": cards}
+
+
+@router.post("/me/collection/sync")
+async def sync_my_collection(
+    _user: dict = Depends(get_current_user),
+    tenant_token: str | None = Depends(get_tenant_token_for_request),
+):
+    """Sync the current user's wallet credentials and admin-issued cards to the public collection (so they appear in search / who-has-which-card)."""
+    raw = await list_credentials(tenant_token)
+    pairs = []
+    seen_card_ids = set()
+    for rec in raw:
+        cred = rec.get("credential") if isinstance(rec.get("credential"), dict) else rec
+        subject = (cred or rec).get("credentialSubject", {}) if isinstance(cred or rec, dict) else {}
+        if not isinstance(subject, dict):
+            continue
+        set_name = (subject.get("set") or "").strip()
+        card_name = (subject.get("name") or "Unknown").strip()
+        cred_id = rec.get("credential_id") or (cred or {}).get("id") or ""
+        card_id = await get_card_id_by_set_and_name(set_name, card_name)
+        if card_id and card_id not in seen_card_ids:
+            pairs.append((card_id, cred_id))
+            seen_card_ids.add(card_id)
+    # Include admin-issued cards so they appear in Explore even when user has no ACA-Py credentials
+    for card_id in await get_admin_issued_card_ids(_user["sub"]):
+        if card_id not in seen_card_ids:
+            pairs.append((card_id, ""))
+            seen_card_ids.add(card_id)
+    await sync_user_collection(_user["sub"], pairs)
+    return {"synced": len(pairs), "message": "Collection synced. You will appear in search and card owners."}
