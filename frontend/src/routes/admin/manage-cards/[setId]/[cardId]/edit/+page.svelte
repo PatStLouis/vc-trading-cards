@@ -448,7 +448,3 @@
     </div>
   {/if}
 </div>
-ection>
-    </div>
-  {/if}
-</div>
