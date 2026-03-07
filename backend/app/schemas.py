@@ -100,6 +100,27 @@ RESPONSE_ISSUE = {
     "issuance": {"card_id": "card_1", "user_id": "usr_abc", "credential_exchange_id": "v1-..."},
 }
 
+RESPONSE_LEDGER = {
+    "entries": [
+        {
+            "id": "ledger_1",
+            "event_type": "card.issued",
+            "card_id": "card_1",
+            "card_name": "Rare Card",
+            "card_number": "1/57",
+            "card_set_name": "Season One",
+            "to_user_id": "usr_abc",
+            "to_username": "player1",
+            "from_user_id": None,
+            "from_username": None,
+            "actor_user_id": "usr_admin",
+            "actor_username": "admin_discord",
+            "created_at": "2025-01-15 12:00:00Z",
+            "payload": None,
+        }
+    ]
+}
+
 RESPONSE_DISCORD_REGISTER = {"registered": True}
 
 RESPONSE_GUILDS = {

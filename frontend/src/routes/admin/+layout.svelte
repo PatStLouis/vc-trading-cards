@@ -16,6 +16,7 @@
     { href: '/admin', label: 'Overview' },
     { href: '/admin/users', label: 'Users' },
     { href: '/admin/manage-cards', label: 'Cards' },
+    { href: '/admin/ledger', label: 'Ledger' },
     { href: '/admin/servers', label: 'Servers' },
     { href: '/admin/agent', label: 'Agent' },
   ];
@@ -106,6 +107,7 @@
         <div class="flex gap-2">
           <a href="/admin/users" class="cursor-pointer rounded-lg px-3 py-1.5 text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 transition-colors">Users</a>
           <a href="/admin/manage-cards" class="cursor-pointer rounded-lg px-3 py-1.5 text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 transition-colors">Cards</a>
+          <a href="/admin/ledger" class="cursor-pointer rounded-lg px-3 py-1.5 text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 transition-colors">Ledger</a>
           <a href="/admin/servers" class="cursor-pointer rounded-lg px-3 py-1.5 text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 transition-colors">Servers</a>
           <a href="/admin/agent" class="cursor-pointer rounded-lg px-3 py-1.5 text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 transition-colors">Agent</a>
           <a href="/wallet" class="cursor-pointer rounded-lg px-3 py-1.5 text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 transition-colors">My deck</a>

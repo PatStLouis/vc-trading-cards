@@ -1,0 +1,11 @@
+# Build SvelteKit static app
+[build]
+  command = "npm run build"
+  publish = "build"
+
+# SPA fallback: serve index.html for routes that don't match a static file.
+# Netlify serves existing files first, so /_app/* and other assets are returned as JS/CSS with correct MIME types.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

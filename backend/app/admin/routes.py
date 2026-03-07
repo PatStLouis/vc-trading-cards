@@ -13,6 +13,7 @@ from app.schemas import (
     RESPONSE_CARD,
     RESPONSE_DELETED,
     RESPONSE_ISSUE,
+    RESPONSE_LEDGER,
     RESPONSE_DISCORD_REGISTER,
     RESPONSE_GUILDS,
     RESPONSE_GUILD,
@@ -46,7 +47,8 @@ from app.db import (
     delete_card,
     get_tenant_by_discord_sub,
     get_tenant_by_user_id,
-    admin_issue_card_to_user,
+    apply_card_issued_event,
+    list_ledger,
 )
 from app.image_analysis import analyze_image
 from config import get_settings
@@ -473,10 +475,24 @@ async def issue_card(
             status_code=400,
             detail="User not found or has no wallet. They must log in at least once before you can issue a card.",
         )
-    issued = await admin_issue_card_to_user(card_id, user_id)
+    actor_id = None if _admin.get("user_id") == "__admin_api_key__" else _admin.get("user_id")
+    issued = await apply_card_issued_event(card_id, user_id, actor_id)
     if not issued:
         raise HTTPException(status_code=500, detail="Failed to record issuance")
     return {"issued": True, "issuance": issued}
+
+
+@router.get("/ledger", responses={200: response_example(RESPONSE_LEDGER)}, tags=["Admin · Ledger"])
+async def get_ledger(
+    _admin: dict = Depends(get_current_admin),
+    limit: int = 100,
+    card_id: str | None = None,
+    user_id: str | None = None,
+    event_type: str | None = None,
+):
+    """List card issuance and trade ledger entries. Optional filters: card_id, user_id, event_type."""
+    entries = await list_ledger(limit=limit, card_id=card_id, user_id=user_id, event_type=event_type)
+    return {"entries": entries}
 
 
 # ---- Discord ----

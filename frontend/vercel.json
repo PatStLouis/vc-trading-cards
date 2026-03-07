@@ -1,0 +1,8 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "build",
+  "framework": "sveltekit",
+  "rewrites": [
+    { "source": "/((?!_app/|favicon|manifest|.*\\.js|.*\\.css|.*\\.ico|.*\\.png|.*\\.svg|.*\\.webmanifest).*)", "destination": "/index.html" }
+  ]
+}

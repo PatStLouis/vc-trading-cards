@@ -148,6 +148,31 @@ async def init_db():
         await conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_admin_issued_cards_card_id ON admin_issued_cards(card_id)"
         )
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS card_ledger (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                event_type TEXT NOT NULL,
+                card_id UUID NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+                to_user_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                from_user_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
+                actor_user_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                metadata JSONB
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_card_ledger_card_id ON card_ledger(card_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_card_ledger_to_user_id ON card_ledger(to_user_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_card_ledger_created_at ON card_ledger(created_at DESC)")
+        # Backfill ledger from existing admin_issued_cards (one event per issuance, actor unknown)
+        await conn.execute("""
+            INSERT INTO card_ledger (event_type, card_id, to_user_id, from_user_id, actor_user_id, metadata)
+            SELECT 'card.issued', a.card_id, a.user_id, NULL, NULL, jsonb_build_object('card_id', a.card_id, 'to_user_id', a.user_id)
+            FROM admin_issued_cards a
+            WHERE NOT EXISTS (
+                SELECT 1 FROM card_ledger l
+                WHERE l.card_id = a.card_id AND l.to_user_id = a.user_id AND l.event_type = 'card.issued'
+            )
+        """)
 
 
 async def close_db():
@@ -912,6 +937,199 @@ async def get_admin_issued_card_ids(user_id: str) -> list[str]:
             user_id,
         )
     return [str(r["card_id"]) for r in rows]
+
+
+# ---- Card ledger (event-driven: append events, then apply to read models) ----
+
+# Event type constants (event stream is source of truth)
+EVENT_CARD_ISSUED = "card.issued"
+EVENT_CARD_TRADED = "card.traded"
+
+
+def _normalize_event_type_for_filter(event_type: str | None) -> str | None:
+    """Map legacy or display names to stored event_type."""
+    if not event_type or not event_type.strip():
+        return None
+    t = event_type.strip().lower()
+    if t in ("issuance", "issued", "card.issued"):
+        return EVENT_CARD_ISSUED
+    if t in ("trade", "traded", "card.traded"):
+        return EVENT_CARD_TRADED
+    return event_type.strip()
+
+
+async def append_card_event(
+    event_type: str,
+    payload: dict,
+    actor_user_id: str | None = None,
+) -> dict | None:
+    """
+    Append an immutable event to the ledger. Payload must include card_id, to_user_id;
+    for trades include from_user_id. Returns the created event row.
+    """
+    import json
+    card_id = (payload.get("card_id") or "").strip()
+    to_user_id = (payload.get("to_user_id") or "").strip()
+    from_user_id = (payload.get("from_user_id") or "").strip() or None
+    if not card_id or not to_user_id:
+        return None
+    pool = _get_pool()
+    meta_json = json.dumps(payload)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO card_ledger (event_type, card_id, to_user_id, from_user_id, actor_user_id, metadata)
+            VALUES ($1, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6::jsonb)
+            RETURNING id, event_type, card_id, to_user_id, from_user_id, actor_user_id, created_at, metadata
+            """,
+            event_type.strip(),
+            card_id,
+            to_user_id,
+            from_user_id,
+            actor_user_id.strip() if actor_user_id else None,
+            meta_json,
+        )
+    if not row:
+        return None
+    return {
+        "id": str(row["id"]),
+        "event_type": row["event_type"],
+        "card_id": str(row["card_id"]),
+        "to_user_id": str(row["to_user_id"]),
+        "from_user_id": str(row["from_user_id"]) if row.get("from_user_id") else None,
+        "actor_user_id": str(row["actor_user_id"]) if row.get("actor_user_id") else None,
+        "created_at": _format_date(row["created_at"]),
+        "payload": row.get("metadata"),
+    }
+
+
+async def apply_card_issued_event(card_id: str, to_user_id: str, actor_user_id: str | None) -> dict | None:
+    """
+    Event-driven issuance: append card.issued event then apply to admin_issued_cards in one transaction.
+    Returns the issuance row { id, card_id, user_id, issued_at } or None.
+    """
+    import json
+    pool = _get_pool()
+    payload = {"card_id": card_id, "to_user_id": to_user_id, "actor_user_id": actor_user_id}
+    meta_json = json.dumps(payload)
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO card_ledger (event_type, card_id, to_user_id, from_user_id, actor_user_id, metadata)
+            VALUES ($1, $2::uuid, $3::uuid, NULL, $4::uuid, $5::jsonb)
+            """,
+            EVENT_CARD_ISSUED,
+            card_id,
+            to_user_id.strip(),
+            actor_user_id if actor_user_id else None,
+            meta_json,
+        )
+        row = await conn.fetchrow(
+            """
+            INSERT INTO admin_issued_cards (card_id, user_id)
+            VALUES ($1::uuid, $2::uuid)
+            RETURNING id, card_id, user_id, issued_at
+            """,
+            card_id,
+            to_user_id.strip(),
+        )
+    if not row:
+        return None
+    return {
+        "id": str(row["id"]),
+        "card_id": str(row["card_id"]),
+        "user_id": str(row["user_id"]),
+        "issued_at": _format_date(row["issued_at"]),
+    }
+
+
+async def insert_ledger_entry(
+    event_type: str,
+    card_id: str,
+    to_user_id: str,
+    from_user_id: str | None = None,
+    actor_user_id: str | None = None,
+    metadata: dict | None = None,
+) -> dict | None:
+    """Append a ledger entry (legacy helper). Prefer append_card_event for new code."""
+    t = event_type.strip().lower()
+    if t == "issuance":
+        event_type = EVENT_CARD_ISSUED
+    elif t == "trade":
+        event_type = EVENT_CARD_TRADED
+    payload = {"card_id": card_id, "to_user_id": to_user_id, "from_user_id": from_user_id, "actor_user_id": actor_user_id}
+    if metadata:
+        payload.update(metadata)
+    return await append_card_event(event_type, payload, actor_user_id)
+
+
+async def list_ledger(
+    limit: int = 100,
+    card_id: str | None = None,
+    user_id: str | None = None,
+    event_type: str | None = None,
+) -> list[dict]:
+    """List ledger entries with card and user display info. Admin only."""
+    pool = _get_pool()
+    if limit < 1 or limit > 500:
+        limit = 100
+    conditions = []
+    values = []
+    i = 0
+    if card_id and card_id.strip():
+        i += 1
+        conditions.append(f"l.card_id = ${i}::uuid")
+        values.append(card_id.strip())
+    if user_id and user_id.strip():
+        i += 1
+        conditions.append(f"(l.to_user_id = ${i}::uuid OR l.from_user_id = ${i}::uuid)")
+        values.append(user_id.strip())
+    if event_type and event_type.strip():
+        i += 1
+        norm = _normalize_event_type_for_filter(event_type)
+        conditions.append(f"l.event_type = ${i}")
+        values.append(norm or event_type.strip())
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    i += 1
+    values.append(limit)
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            f"""
+            SELECT l.id, l.event_type, l.card_id, l.to_user_id, l.from_user_id, l.actor_user_id, l.created_at, l.metadata,
+                   c.name AS card_name, c.number AS card_number, c.set_name AS card_set_name,
+                   to_ua.provider_username AS to_username,
+                   from_ua.provider_username AS from_username,
+                   actor_ua.provider_username AS actor_username
+            FROM card_ledger l
+            JOIN cards c ON c.id = l.card_id
+            LEFT JOIN user_accounts to_ua ON to_ua.user_id = l.to_user_id AND to_ua.provider = 'discord'
+            LEFT JOIN user_accounts from_ua ON from_ua.user_id = l.from_user_id AND from_ua.provider = 'discord'
+            LEFT JOIN user_accounts actor_ua ON actor_ua.user_id = l.actor_user_id AND actor_ua.provider = 'discord'
+            {where}
+            ORDER BY l.created_at DESC
+            LIMIT ${i}
+            """,
+            *values,
+        )
+    return [
+        {
+            "id": str(r["id"]),
+            "event_type": r["event_type"],
+            "card_id": str(r["card_id"]),
+            "card_name": r["card_name"] or "",
+            "card_number": r["card_number"] or "",
+            "card_set_name": r["card_set_name"] or "",
+            "to_user_id": str(r["to_user_id"]),
+            "to_username": r["to_username"] or str(r["to_user_id"]),
+            "from_user_id": str(r["from_user_id"]) if r.get("from_user_id") else None,
+            "from_username": r["from_username"] if r.get("from_user_id") else None,
+            "actor_user_id": str(r["actor_user_id"]) if r.get("actor_user_id") else None,
+            "actor_username": (r["actor_username"] or str(r["actor_user_id"])) if r.get("actor_user_id") else "API key",
+            "created_at": _format_date(r["created_at"]),
+            "payload": r.get("metadata"),
+        }
+        for r in rows
+    ]
 
 
 # ---- Public catalog & user collection ----
