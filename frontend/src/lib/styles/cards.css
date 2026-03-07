@@ -186,7 +186,7 @@ button.card__rotator:focus-visible {
   background-color: var(--card-back);
   -webkit-transform: rotateY(180deg) translateZ(1px);
   transform: rotateY(180deg) translateZ(1px);
-  backface-visibility: visible;
+  backface-visibility: hidden;
 }
 
 .card__front, .card__front * {

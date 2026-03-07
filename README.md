@@ -67,14 +67,14 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. Log in with Discord (redirects to backend `/auth/discord` → Discord → backend `/auth/callback` → sets cookie → redirects to `/wallet`). Wallet page loads `/api/me` and `/api/wallet/credentials` (proxied to backend in dev).
+Open http://localhost:5173. Log in with Discord or Twitch (redirects to backend `/auth/login?provider=...` → provider → backend `/auth/callback` → sets cookie → redirects to `/wallet`). Wallet page loads `/api/me` and `/api/wallet/cards` (proxied to backend in dev).
 
 **Frontend env (optional):** Copy `frontend/.env.example` to `frontend/.env`. Set `VITE_API_URL` only when the API is on a different origin (e.g. production with a separate API host). For local dev with the Vite proxy, leave it unset.
 
 ### Environment (backend)
 
 - `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` – Discord OAuth2 app
-- `DISCORD_REDIRECT_URI` – optional; defaults to `{BACKEND_URL}/auth/callback`. Set this explicitly (e.g. `https://your-backend.railway.app/auth/callback`) to avoid using the wrong URL when `BACKEND_URL` is misconfigured. You can verify what the backend sends by opening `GET {BACKEND_URL}/auth/redirect-uri` (returns `{"redirect_uri": "..."}`).
+- `DISCORD_REDIRECT_URI` – optional; defaults to `{BACKEND_URL}/auth/callback`. Same callback URL is used for Twitch (provider is inferred from OAuth state). Set explicitly (e.g. `https://your-backend.railway.app/auth/callback`) when `BACKEND_URL` is misconfigured.
 - `BACKEND_URL` – **Backend’s own** public URL (e.g. `https://vc-trading-cards-production.up.railway.app`). Used for the Discord OAuth2 redirect URI and cookie `secure` flag. Do **not** set this to the frontend URL or Discord will get the wrong redirect_uri and auth will fail.
 - `FRONTEND_URL` – frontend origin (e.g. `http://localhost:5173` or your frontend Railway URL) for CORS and post-login redirect to `/wallet`.
 - `SECRET_KEY` – used to sign session cookie
@@ -95,13 +95,18 @@ The app can act as a **Discord bot** so users can run `/wallet` and `/collection
    ```bash
    uv run python scripts/register_discord_commands.py
    ```
-6. Invite the bot to a server (OAuth2 → URL Generator → scopes: `bot`, `applications.commands`).
+6. Invite the bot to a server: use the **Add bot to server** button in Admin → Agent, or build a link in the portal (OAuth2 → URL Generator → scopes: `bot`, `applications.commands`).  
+   If Discord shows **"Integration requires code grant"**, go to [Developer Portal](https://discord.com/developers/applications) → your app → **OAuth2** → **General** and turn **off** “Requires OAuth2 Code Grant”. That setting is for user login flows; the bot invite link does not use it.
 
 Commands: **/wallet** — link to open your deck (and card count if logged in); **/collection** — same.
 
 ### Admin dashboard
 
 Admins log in with the same Discord OAuth as everyone else. Set `ADMIN_DISCORD_IDS` to your Discord user ID(s), e.g. `ADMIN_DISCORD_IDS=123456789,987654321`. After login, admins see an **Admin** button on the wallet page and can open **/admin** to view total users and a table of registered users (Discord username, ID, wallet ID, created date). Non-admins get 403 on `/api/admin/*` and are redirected from `/admin` to `/wallet`.
+
+### OCR (card image analysis)
+
+When adding a card in **Admin → Cards → New card**, uploading an image triggers analysis: format, dimensions, EXIF/ICC, and **OCR** to suggest name, quote, photographer, and card number from the image text. OCR uses **EasyOCR** (Python-only; no system binary like Tesseract required). The first OCR run may download language models (~100MB). No env vars are required.
 
 ## Project layout
 
@@ -136,7 +141,7 @@ The backend needs a reachable `DATABASE_URL`. If you run the backend **in Docker
 The backend is trying to connect to the host in `DATABASE_URL` and nothing is reachable. Fix: (1) Use **docker compose** and run `docker compose up -d postgres backend` so `DATABASE_URL` is set to `postgres:5432` and Postgres is on the same network. (2) Or, if you run the backend container alone, ensure Postgres is running (e.g. on the host or another container) and set `DATABASE_URL` to that host (e.g. `host.docker.internal:5432` from inside the container, not `localhost`).
 
 - **Backend image** expects `DATABASE_URL`, `SECRET_KEY`, `BACKEND_URL`, `FRONTEND_URL`, Discord env vars; expose port 8000.
-- **Frontend** image: static build served with nginx on port 80. When the backend is on a **different origin** (e.g. backend on :8000, frontend on :80), build with `--build-arg VITE_API_URL=http://localhost:8000` so "Log in with Discord" and API calls use the backend URL; otherwise you get "Not found: /auth/discord".
+- **Frontend** image: static build served with nginx on port 80. When the backend is on a **different origin** (e.g. backend on :8000, frontend on :80), build with `--build-arg VITE_API_URL=http://localhost:8000` so "Log in with Discord/Twitch" and API calls use the backend URL; otherwise you get "Not found: /auth/login" or similar.
 - **Agent**: see [agent/README.md](agent/README.md); override `ACAPY_JWT_SECRET` at run time.
 
 ### Card images (uploads) in production

@@ -5,8 +5,9 @@
   import { Button } from '$lib/components/ui/button';
   import * as Card from '$lib/components/ui/card';
   import TradingCard from '$lib/components/Card.svelte';
+  import { fetchApi, fetchAdmin, apiUrl } from '$lib/api';
 
-  const API = import.meta.env.VITE_API_URL ?? '';
+  const API = apiUrl();
 
   type CardSet = { id: string; name: string; slug: string; description: string; set_type?: string; card_back_path?: string; created_at: string; updated_at: string };
   type CardItem = {
@@ -43,7 +44,7 @@
 
   onMount(async () => {
     try {
-      const meRes = await fetch(`${API}/api/me`, { credentials: 'include' });
+      const meRes = await fetchApi('/api/me', { auth: true });
       if (meRes.status === 401) {
         goto('/');
         return;
@@ -55,7 +56,7 @@
         goto('/wallet');
         return;
       }
-      const setsRes = await fetch(`${API}/api/admin/sets`, { credentials: 'include' });
+      const setsRes = await fetchAdmin('/api/admin/sets');
       if (!setsRes.ok) throw new Error('Failed to load sets');
       const data = await setsRes.json();
       sets = data.sets || [];
@@ -76,7 +77,7 @@
   });
 
   async function loadCards(setId: string) {
-    const res = await fetch(`${API}/api/admin/sets/${setId}/cards`, { credentials: 'include' });
+    const res = await fetchAdmin(`/api/admin/sets/${setId}/cards`);
     if (!res.ok) throw new Error('Failed to load cards');
     const data = await res.json();
     cards = data.cards || [];
@@ -114,9 +115,8 @@
       form.append('description', newSetDescription.trim());
       form.append('set_type', newSetType.trim());
       if (newSetBackFile) form.append('card_back', newSetBackFile);
-      const res = await fetch(`${API}/api/admin/sets`, {
+      const res = await fetchAdmin('/api/admin/sets', {
         method: 'POST',
-        credentials: 'include',
         body: form,
       });
       if (!res.ok) {
@@ -154,7 +154,7 @@
     error = '';
     success = '';
     try {
-      const res = await fetch(`${API}/api/admin/sets/${setId}`, { method: 'DELETE', credentials: 'include' });
+      const res = await fetchAdmin(`/api/admin/sets/${setId}`, { method: 'DELETE' });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || 'Failed to delete set');
@@ -174,7 +174,7 @@
     error = '';
     success = '';
     try {
-      const res = await fetch(`${API}/api/admin/cards/${c.id}`, { method: 'DELETE', credentials: 'include' });
+      const res = await fetchAdmin(`/api/admin/cards/${c.id}`, { method: 'DELETE' });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || 'Failed to delete card');
@@ -192,7 +192,7 @@
     issueError = '';
     issueUsers = [];
     issueUsersLoading = true;
-    fetch(`${API}/api/admin/users`, { credentials: 'include' })
+    fetchAdmin('/api/admin/users')
       .then((r) => r.ok ? r.json() : { users: [] })
       .then((data) => { issueUsers = data.users || []; })
       .catch(() => { issueUsers = []; })
@@ -210,9 +210,8 @@
     issueSubmitting = true;
     issueError = '';
     try {
-      const res = await fetch(`${API}/api/admin/cards/${issueCard.id}/issue`, {
+      const res = await fetchAdmin(`/api/admin/cards/${issueCard.id}/issue`, {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ discord_sub: issueTargetSub.trim() }),
       });
@@ -369,9 +368,15 @@
 
   <!-- Modal: Issue card to user -->
   {#if issueCard}
-    <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="issue-card-title">
-      <div class="absolute inset-0 bg-black/60" onclick={closeIssueModal}></div>
-      <div class="relative w-full max-w-md bg-card border border-border rounded-t-2xl sm:rounded-2xl shadow-xl p-6 max-h-[90vh] overflow-y-auto" onclick={(e) => e.stopPropagation()}>
+    <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="issue-card-title" tabindex="-1">
+      <div
+        class="absolute inset-0 bg-black/60"
+        role="button"
+        tabindex="0"
+        aria-label="Close modal"
+        onclick={(e) => { if ((e.target as HTMLElement).closest?.('[data-modal-content]')) return; closeIssueModal(); }}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeIssueModal(); } }}></div>
+      <div class="relative w-full max-w-md bg-card border border-border rounded-t-2xl sm:rounded-2xl shadow-xl p-6 max-h-[90vh] overflow-y-auto" data-modal-content>
         <h2 id="issue-card-title" class="text-lg font-semibold mb-1">Issue card to user</h2>
         <p class="text-muted-foreground text-sm mb-4">Issue “{issueCard.name}” to a registered user. They will see it in their deck immediately.</p>
         {#if issueError}
@@ -414,9 +419,15 @@
 
   <!-- Modal: Create set -->
   {#if showCreateSet}
-    <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="create-set-title">
-      <div class="absolute inset-0 bg-black/60" onclick={closeCreateSet}></div>
-      <div class="relative w-full max-w-md bg-card border border-border rounded-t-2xl sm:rounded-2xl shadow-xl p-6 max-h-[90vh] overflow-y-auto" onclick={(e) => e.stopPropagation()}>
+    <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="create-set-title" tabindex="-1">
+      <div
+        class="absolute inset-0 bg-black/60"
+        role="button"
+        tabindex="0"
+        aria-label="Close modal"
+        onclick={(e) => { if ((e.target as HTMLElement).closest?.('[data-modal-content]')) return; closeCreateSet(); }}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeCreateSet(); } }}></div>
+      <div class="relative w-full max-w-md bg-card border border-border rounded-t-2xl sm:rounded-2xl shadow-xl p-6 max-h-[90vh] overflow-y-auto" data-modal-content>
         <h2 id="create-set-title" class="text-lg font-semibold mb-1">Create set</h2>
         <p class="text-muted-foreground text-sm mb-4">Slug is derived from the name.</p>
         <div class="space-y-4">
@@ -461,8 +472,10 @@
       role="dialog"
       aria-modal="true"
       aria-label="Card preview"
-      onclick={() => (previewCard = null)}>
-      <div class="max-w-[min(280px,95vw)]" onclick={(e) => e.stopPropagation()}>
+      tabindex="-1"
+      onclick={() => (previewCard = null)}
+      onkeydown={(e) => { if (e.key === 'Escape') previewCard = null; }}>
+      <div class="max-w-[min(280px,95vw)]" role="presentation" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
         <TradingCard
           id={previewCard.id}
           name={previewCard.name}

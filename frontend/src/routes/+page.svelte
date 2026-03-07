@@ -6,13 +6,15 @@
   import QRCodeStyling from 'qr-code-styling';
   import AppIcon from '$lib/components/AppIcon.svelte';
   import { APP_ICON_URL } from '$lib/app-icon';
+  import { apiUrl } from '$lib/api';
 
-  const API_BASE = import.meta.env.VITE_API_URL ?? '';
+  const API_BASE = apiUrl();
 
   let error = $state('');
   let passkeyError = $state('');
   let passkeyLoading = $state(false);
   let discordLoading = $state(false);
+  let twitchLoading = $state(false);
   let isDesktop = $state(false);
   let appUrl = $state('');
   let qrContainer: HTMLDivElement | null = $state(null);
@@ -59,18 +61,40 @@
     return intent;
   }
 
-  async function login() {
-    discordLoading = true;
+  async function loginTwitch() {
+    twitchLoading = true;
     try {
-      const res = await fetch(`${API_BASE}/auth/discord/url`);
+      const res = await fetch(`${API_BASE}/auth/login/url?provider=twitch`);
       if (!res.ok) {
-        window.location.href = `${API_BASE}/auth/discord`;
+        window.location.href = `${API_BASE}/auth/login?provider=twitch`;
         return;
       }
       const data = await res.json();
       const url: string = data?.url;
       if (!url) {
-        window.location.href = `${API_BASE}/auth/discord`;
+        window.location.href = `${API_BASE}/auth/login?provider=twitch`;
+        return;
+      }
+      window.location.href = url;
+    } catch {
+      window.location.href = `${API_BASE}/auth/login?provider=twitch`;
+    } finally {
+      twitchLoading = false;
+    }
+  }
+
+  async function login() {
+    discordLoading = true;
+    try {
+      const res = await fetch(`${API_BASE}/auth/login/url?provider=discord`);
+      if (!res.ok) {
+        window.location.href = `${API_BASE}/auth/login?provider=discord`;
+        return;
+      }
+      const data = await res.json();
+      const url: string = data?.url;
+      if (!url) {
+        window.location.href = `${API_BASE}/auth/login?provider=discord`;
         return;
       }
       const isAndroid = /Android/i.test(navigator.userAgent);
@@ -80,7 +104,7 @@
         window.location.href = url;
       }
     } catch {
-      window.location.href = `${API_BASE}/auth/discord`;
+      window.location.href = `${API_BASE}/auth/login?provider=discord`;
     } finally {
       discordLoading = false;
     }
@@ -131,7 +155,17 @@
     <Card.Root class="landing__card w-full border border-border/80 bg-card/95 text-card-foreground rounded-2xl shadow-2xl shadow-black/30 p-8 backdrop-blur-sm">
       <Card.Content class="space-y-5 p-0">
         {#if error}
-          <p class="text-destructive text-sm font-medium">Login failed. Please try again.</p>
+          <p class="text-destructive text-sm font-medium">
+            {#if error === 'auth_failed'}
+              Login failed. Please try again.
+            {:else if error === 'token_exchange_failed'}
+              Could not complete login. Please try again.
+            {:else if error === 'user_fetch_failed'}
+              Could not load your account. Please try again.
+            {:else}
+              Something went wrong. Please try again.
+            {/if}
+          </p>
         {/if}
         <Button
           class="landing__cta w-full font-semibold text-base py-6 rounded-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-primary/20 flex items-center justify-center gap-2"
@@ -145,6 +179,20 @@
             </svg>
           </span>
           {discordLoading ? 'Opening Discord…' : 'Log in with Discord'}
+        </Button>
+        <Button
+          variant="outline"
+          class="w-full font-semibold py-5 rounded-xl flex items-center justify-center gap-2 bg-purple-950/30 border-purple-600/50 hover:bg-purple-900/40 hover:border-purple-500"
+          size="lg"
+          onclick={loginTwitch}
+          disabled={twitchLoading}
+        >
+          <span class="shrink-0 flex items-center justify-center" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5" aria-hidden="true">
+              <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/>
+            </svg>
+          </span>
+          {twitchLoading ? 'Opening Twitch…' : 'Log in with Twitch'}
         </Button>
         {#if isWebAuthnAvailable()}
           <Button

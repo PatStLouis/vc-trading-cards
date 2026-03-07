@@ -38,17 +38,17 @@ async def test_api_me_with_valid_session(client: AsyncClient, valid_session_cook
 
 
 @pytest.mark.asyncio
-async def test_wallet_credentials_requires_auth(client: AsyncClient):
-    r = await client.get("/api/wallet/credentials")
+async def test_wallet_cards_requires_auth(client: AsyncClient):
+    r = await client.get("/api/wallet/cards")
     assert r.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_wallet_credentials_with_session_returns_cards(
+async def test_wallet_cards_with_session_returns_cards(
     client: AsyncClient, valid_session_cookie: str
 ):
     r = await client.get(
-        "/api/wallet/credentials",
+        "/api/wallet/cards",
         cookies={_session_cookie_name(): valid_session_cookie},
     )
     assert r.status_code == 200
@@ -58,11 +58,11 @@ async def test_wallet_credentials_with_session_returns_cards(
 
 
 @pytest.mark.asyncio
-async def test_wallet_credentials_normalizes_credential_subject(
+async def test_wallet_cards_normalizes_credential_subject(
     client: AsyncClient, valid_session_cookie: str
 ):
     """When ACA-Py returns a credential with credentialSubject, response has card shape."""
-    from app.routers import wallet
+    from app.wallet import routes as wallet_routes
 
     async def fake_list(_token):
         return [{
@@ -79,7 +79,7 @@ async def test_wallet_credentials_normalizes_credential_subject(
         }]
 
     with (
-        patch.object(wallet, "list_credentials", fake_list),
+        patch.object(wallet_routes, "list_credentials", fake_list),
         patch(
             "app.db.get_tenant_by_discord_sub",
             AsyncMock(
@@ -93,7 +93,7 @@ async def test_wallet_credentials_normalizes_credential_subject(
         ),
     ):
         r = await client.get(
-            "/api/wallet/credentials",
+            "/api/wallet/cards",
             cookies={_session_cookie_name(): valid_session_cookie},
         )
     assert r.status_code == 200

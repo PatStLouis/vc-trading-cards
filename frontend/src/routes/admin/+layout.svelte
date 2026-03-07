@@ -4,7 +4,9 @@
   import { page } from '$app/stores';
   import { Button } from '$lib/components/ui/button';
   import AppIcon from '$lib/components/AppIcon.svelte';
+  import { fetchApi } from '$lib/api';
 
+  let { children } = $props();
   let user: { username: string; is_admin: boolean } | null = $state(null);
   let ready = $state(false);
 
@@ -14,12 +16,13 @@
     { href: '/admin', label: 'Overview' },
     { href: '/admin/users', label: 'Users' },
     { href: '/admin/manage-cards', label: 'Cards' },
+    { href: '/admin/servers', label: 'Servers' },
     { href: '/admin/agent', label: 'Agent' },
   ];
 
   onMount(async () => {
     try {
-      const meRes = await fetch(`${API}/api/me`, { credentials: 'include' });
+      const meRes = await fetchApi('/api/me', { auth: true });
       if (meRes.status === 401) {
         goto('/');
         return;
@@ -28,7 +31,7 @@
       const me = await meRes.json();
       user = me;
       if (!me.is_admin) {
-        goto('/wallet');
+        goto('/wallet?admin_required=1');
         return;
       }
     } catch {
@@ -39,7 +42,7 @@
   });
 
   async function logout() {
-    await fetch(`${API}/auth/logout`, { method: 'POST', credentials: 'include' });
+    await fetchApi('/auth/logout', { method: 'POST', auth: true });
     goto('/');
   }
 </script>
@@ -103,12 +106,13 @@
         <div class="flex gap-2">
           <a href="/admin/users" class="cursor-pointer rounded-lg px-3 py-1.5 text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 transition-colors">Users</a>
           <a href="/admin/manage-cards" class="cursor-pointer rounded-lg px-3 py-1.5 text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 transition-colors">Cards</a>
+          <a href="/admin/servers" class="cursor-pointer rounded-lg px-3 py-1.5 text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 transition-colors">Servers</a>
           <a href="/admin/agent" class="cursor-pointer rounded-lg px-3 py-1.5 text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 transition-colors">Agent</a>
           <a href="/wallet" class="cursor-pointer rounded-lg px-3 py-1.5 text-sm text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 transition-colors">My deck</a>
         </div>
       </header>
       <main class="flex-1 w-full max-w-none px-4 py-5 sm:px-6 sm:py-6 lg:px-10 lg:py-8">
-        <slot />
+        {@render children()}
       </main>
     </div>
   </div>

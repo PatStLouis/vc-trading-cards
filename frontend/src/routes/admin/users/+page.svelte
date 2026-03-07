@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import * as Table from '$lib/components/ui/table';
   import { Button } from '$lib/components/ui/button';
+  import { fetchAdmin } from '$lib/api';
 
   type UserRow = { discord_sub: string; discord_username: string; wallet_id: string; created_at: string | null };
 
@@ -10,11 +11,9 @@
   let error = $state('');
   let search = $state('');
 
-  const API = import.meta.env.VITE_API_URL ?? '';
-
   onMount(async () => {
     try {
-      const res = await fetch(`${API}/api/admin/users`, { credentials: 'include' });
+      const res = await fetchAdmin('/api/admin/users');
       if (!res.ok) throw new Error('Failed to load users');
       const data = await res.json();
       users = data.users || [];

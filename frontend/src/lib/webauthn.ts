@@ -3,7 +3,9 @@
  * Uses the Credential Management API; options/verify go to the backend.
  */
 
-const API = import.meta.env.VITE_API_URL ?? '';
+import { apiUrl } from '$lib/api';
+
+const API = apiUrl();
 
 function bufferToBase64url(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);

@@ -4,8 +4,9 @@
   import { page } from '$app/stores';
   import { Button } from '$lib/components/ui/button';
   import TradingCard from '$lib/components/Card.svelte';
+  import { fetchAdmin, apiUrl } from '$lib/api';
 
-  const API = import.meta.env.VITE_API_URL ?? '';
+  const API = apiUrl();
 
   type CardSet = { id: string; name: string; slug: string; description: string; set_type?: string; card_back_path?: string; created_at: string; updated_at: string };
   type CardItem = {
@@ -30,9 +31,11 @@
   let photograph = $state('');
   let artist = $state('');
   let band = $state('');
+  let number = $state('');
   let imageFile: File | null = $state(null);
   let imagePreviewUrl = $state('');
   let currentImageUrl = $state('');
+  let drawNumberOnImage = $state(false);
 
   let showCamera = $state(false);
   let cameraError = $state('');
@@ -115,8 +118,8 @@
     }
     try {
       const [setRes, cardRes] = await Promise.all([
-        fetch(`${API}/api/admin/sets/${setId}`, { credentials: 'include' }),
-        fetch(`${API}/api/admin/cards/${cardId}`, { credentials: 'include' }),
+        fetchAdmin(`/api/admin/sets/${setId}`),
+        fetchAdmin(`/api/admin/cards/${cardId}`),
       ]);
       if (setRes.status === 404 || cardRes.status === 404) {
         goto('/admin/manage-cards');
@@ -132,6 +135,7 @@
       photograph = card.photograph ?? '';
       artist = card.artist ?? '';
       band = card.band ?? '';
+      number = card.number ?? '';
       currentImageUrl = card.image_path ? imageUrl(card.image_path) : '';
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load';
@@ -145,9 +149,14 @@
     submitting = true;
     error = '';
     try {
+      let fileToUpload: File | null = imageFile;
+      if (imageFile && drawNumberOnImage && number.trim()) {
+        const composited = await drawNumberOnImageCanvas(imageFile, number.trim());
+        if (composited) fileToUpload = composited;
+      }
       const form = new FormData();
       form.append('name', name.trim());
-      form.append('number', card.number ?? '');
+      form.append('number', number.trim());
       form.append('rarity', rarity);
       form.append('set_name', set.name);
       form.append('quote', quote.trim());
@@ -158,10 +167,9 @@
       form.append('types', 'TradingCard');
       form.append('subtypes', card.subtypes ?? 'trading-cards');
       form.append('supertype', card.supertype ?? 'trading-card');
-      if (imageFile) form.append('image', imageFile);
-      const res = await fetch(`${API}/api/admin/cards/${card.id}`, {
+      if (fileToUpload) form.append('image', fileToUpload);
+      const res = await fetchAdmin(`/api/admin/cards/${card.id}`, {
         method: 'PUT',
-        credentials: 'include',
         body: form,
       });
       if (!res.ok) {
@@ -182,6 +190,57 @@
       return base ? `${base}/uploads/${set.card_back_path}` : `/uploads/${set.card_back_path}`;
     }
     return '/card-back.svg';
+  }
+
+  /** Draw the card number onto the image at bottom-right; returns a new PNG File for upload. */
+  function drawNumberOnImageCanvas(file: File, numberText: string): Promise<File | null> {
+    if (!numberText.trim()) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        const padX = Math.max(12, img.width * 0.04);
+        const padY = Math.max(12, img.height * 0.04);
+        const fontSize = Math.max(14, Math.round(img.height * 0.035));
+        ctx.font = `600 ${fontSize}px system-ui, sans-serif`;
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'bottom';
+        const x = img.width - padX;
+        const y = img.height - padY;
+        ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+        ctx.lineWidth = Math.max(2, fontSize / 8);
+        ctx.strokeText(numberText.trim(), x, y);
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.fillText(numberText.trim(), x, y);
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              resolve(null);
+              return;
+            }
+            const name = file.name.replace(/\.[^.]+$/, '') + '.png';
+            resolve(new File([blob], name, { type: 'image/png' }));
+          },
+          'image/png',
+          0.92
+        );
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(null);
+      };
+      img.src = url;
+    });
   }
 
   const displayImg = $derived(imagePreviewUrl || currentImageUrl);
@@ -253,6 +312,16 @@
           </div>
 
           <div>
+            <label for="card-number" class="block text-xs font-medium text-neutral-200 mb-1">Card number</label>
+            <input
+              id="card-number"
+              type="text"
+              bind:value={number}
+              placeholder="e.g. 1"
+              class="w-full rounded-md border border-neutral-600 bg-neutral-800 px-3 py-2 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:border-neutral-500" />
+          </div>
+
+          <div>
             <label for="card-quote" class="block text-xs font-medium text-neutral-200 mb-1">Quote</label>
             <input
               id="card-quote"
@@ -302,12 +371,12 @@
           </div>
 
           <div>
-            <label class="block text-xs font-medium text-neutral-200 mb-1">Image (PNG)</label>
+            <label class="block text-xs font-medium text-neutral-200 mb-1">Image (PNG or JPEG)</label>
             <p class="text-neutral-500 text-xs mb-1">Leave empty to keep current image.</p>
             <div class="flex flex-wrap gap-2 items-center">
               <input
                 type="file"
-                accept=".png,image/png"
+                accept=".png,.jpg,.jpeg,image/png,image/jpeg"
                 class="text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-neutral-600 file:text-white file:cursor-pointer"
                 onchange={(e) => {
                   setImageFile((e.target as HTMLInputElement).files?.[0] ?? null);
@@ -339,6 +408,10 @@
                 <span class="text-xs text-neutral-400 truncate flex-1">{imageFile.name}</span>
                 <Button variant="ghost" size="sm" class="h-7 text-xs text-neutral-400 hover:text-white" onclick={() => setImageFile(null)}>Clear</Button>
               </div>
+              <label class="mt-2 flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" bind:checked={drawNumberOnImage} class="rounded border-neutral-600 bg-neutral-800 text-neutral-200 focus:ring-neutral-500" />
+                <span class="text-xs text-neutral-300">Draw card number on image (bottom-right)</span>
+              </label>
             {/if}
           </div>
         </div>
@@ -360,7 +433,7 @@
             <TradingCard
               id={card.id}
               name={name || 'Card name'}
-              number={card.number ?? ''}
+              number={number}
               set={set.name}
               types={['TradingCard']}
               subtypes={card.subtypes ?? 'trading-cards'}
@@ -372,6 +445,10 @@
           </div>
         </div>
       </section>
+    </div>
+  {/if}
+</div>
+ection>
     </div>
   {/if}
 </div>

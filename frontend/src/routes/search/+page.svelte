@@ -3,15 +3,16 @@
   import { Button } from '$lib/components/ui/button';
   import TradingCard from '$lib/components/Card.svelte';
   import AppIcon from '$lib/components/AppIcon.svelte';
+  import { apiUrl, fetchApi, poserDidUrl } from '$lib/api';
 
-  const API = import.meta.env.VITE_API_URL ?? '';
+  const API = apiUrl();
 
   type Set = { id: string; name: string; slug: string; description: string; set_type?: string; card_back_path?: string };
   type Card = {
     id: string; set_id: string; name: string; number: string; rarity: string; set_name: string;
     image_path: string; types: string[]; subtypes: string; supertype: string; card_back_path?: string;
   };
-  type User = { discord_sub: string; username: string; collection_count: number };
+  type User = { user_id: string; username: string; poser_username?: string | null; collection_count: number };
 
   let tab: 'catalog' | 'users' = $state('catalog');
   let sets: Set[] = $state([]);
@@ -28,7 +29,7 @@
   let userCollectionLoading = $state(false);
 
   let selectedCard: Card | null = $state(null);
-  let cardOwners: { discord_sub: string; username: string }[] = $state([]);
+  let cardOwners: { user_id?: string; discord_sub?: string; username: string }[] = $state([]);
   let cardOwnersLoading = $state(false);
 
   function imageUrl(path: string): string {
@@ -52,7 +53,7 @@
   async function loadSets() {
     setsLoading = true;
     try {
-      const res = await fetch(`${API}/api/public/sets`);
+      const res = await fetchApi('/api/public/sets');
       if (res.ok) {
         const data = await res.json();
         sets = data.sets || [];
@@ -68,7 +69,7 @@
     setCardsLoading = true;
     setCards = [];
     try {
-      const res = await fetch(`${API}/api/public/sets/${set.id}/cards`);
+      const res = await fetchApi(`/api/public/sets/${set.id}/cards`);
       if (res.ok) {
         const data = await res.json();
         setCards = data.cards || [];
@@ -83,7 +84,7 @@
     cardOwnersLoading = true;
     cardOwners = [];
     try {
-      const res = await fetch(`${API}/api/public/cards/${card.id}/owners`);
+      const res = await fetchApi(`/api/public/cards/${card.id}/owners`);
       if (res.ok) {
         const data = await res.json();
         cardOwners = data.owners || [];
@@ -104,7 +105,7 @@
     userSearchResults = [];
     selectedUser = null;
     try {
-      const res = await fetch(`${API}/api/public/users?q=${encodeURIComponent(q)}&limit=30`);
+      const res = await fetchApi(`/api/public/users?q=${encodeURIComponent(q)}&limit=30`);
       if (res.ok) {
         const data = await res.json();
         userSearchResults = data.users || [];
@@ -119,10 +120,11 @@
     userCollectionLoading = true;
     userCollection = [];
     try {
-      const res = await fetch(`${API}/api/public/users/${encodeURIComponent(user.discord_sub)}/collection`);
+      const res = await fetchApi(`/api/public/users/${encodeURIComponent(user.user_id)}/collection`);
       if (res.ok) {
         const data = await res.json();
         userCollection = data.cards || [];
+        if (data.user && data.user.poser_username !== undefined) selectedUser = { ...selectedUser!, poser_username: data.user.poser_username };
       }
     } finally {
       userCollectionLoading = false;
@@ -258,7 +260,7 @@
                               <button
                                 type="button"
                                 class="cursor-pointer text-sm text-primary hover:underline hover:text-primary/90 transition-colors"
-                                onclick={() => { tab = 'users'; closeCard(); openUser({ discord_sub: owner.discord_sub, username: owner.username, collection_count: 0 }); }}
+                                onclick={() => { tab = 'users'; closeCard(); openUser({ user_id: owner.user_id ?? '', username: owner.username, collection_count: 0 }); }}
                               >
                                 @{owner.username}
                               </button>
@@ -298,6 +300,16 @@
               <Button variant="ghost" size="sm" onclick={closeUser}>← Back</Button>
               <h2 class="text-lg font-semibold">@{selectedUser.username}</h2>
               <span class="text-sm text-muted-foreground">({selectedUser.collection_count} cards)</span>
+              {#if selectedUser.poser_username}
+                <a
+                  href={poserDidUrl(selectedUser.poser_username)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-xs text-muted-foreground hover:text-foreground underline"
+                >
+                  DID
+                </a>
+              {/if}
             </div>
             {#if userCollectionLoading}
               <p class="text-muted-foreground text-sm">Loading collection…</p>

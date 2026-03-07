@@ -1,15 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { fetchAdmin } from '$lib/api';
 
   let stats: { total_users: number; total_sets: number; total_cards: number } | null = $state(null);
   let loading = $state(true);
   let error = $state('');
 
-  const API = import.meta.env.VITE_API_URL ?? '';
-
   onMount(async () => {
     try {
-      const res = await fetch(`${API}/api/admin/stats`, { credentials: 'include' });
+      const res = await fetchAdmin('/api/admin/stats');
       if (!res.ok) throw new Error('Failed to load stats');
       stats = await res.json();
     } catch (e) {
@@ -19,10 +18,10 @@
     }
   });
 
-  const links = [
-    { href: '/admin/users', label: 'Users', value: () => stats?.total_users ?? 0, desc: 'Collectors' },
-    { href: '/admin/manage-cards', label: 'Cards', value: () => stats?.total_cards ?? 0, desc: 'Across {0} sets'.replace('{0}', String(stats?.total_sets ?? 0)) },
-  ];
+  const links = $derived([
+    { href: '/admin/users', label: 'Users', value: stats?.total_users ?? 0, desc: 'Collectors' },
+    { href: '/admin/manage-cards', label: 'Cards', value: stats?.total_cards ?? 0, desc: `Across ${stats?.total_sets ?? 0} sets` },
+  ]);
 </script>
 
 <div class="space-y-6">
@@ -40,15 +39,15 @@
       {#each links as link}
         <a
           href={link.href}
-          class="group block rounded-xl border border-neutral-700 bg-neutral-800/80 p-5 transition-colors hover:border-neutral-600 hover:bg-neutral-800">
+          class="admin-overview-card group block rounded-xl border border-neutral-700 bg-neutral-800/80 p-5 no-underline hover:no-underline transition-all duration-200 ease-out hover:border-neutral-500 hover:bg-neutral-800 hover:shadow-lg hover:shadow-black/20 hover:-translate-y-0.5 hover:scale-[1.01]">
           <div class="flex items-start justify-between gap-3">
             <div>
               <span class="font-medium text-neutral-100 group-hover:text-white transition-colors">{link.label}</span>
-              <p class="text-sm text-neutral-400 mt-0.5">{link.desc}</p>
+              <p class="text-sm text-neutral-400 mt-0.5 group-hover:text-neutral-300 transition-colors">{link.desc}</p>
             </div>
-            <span class="tabular-nums text-2xl font-semibold text-neutral-100">{link.value()}</span>
+            <span class="tabular-nums text-2xl font-semibold text-neutral-100 group-hover:text-white transition-colors">{link.value}</span>
           </div>
-          <span class="mt-3 inline-block text-sm text-neutral-400 group-hover:text-white">View →</span>
+          <span class="mt-3 inline-block text-sm text-neutral-400 group-hover:text-white group-hover:translate-x-0.5 transition-all duration-200">View →</span>
         </a>
       {/each}
     </div>
@@ -63,3 +62,11 @@
     </div>
   {/if}
 </div>
+
+<style>
+  /* Override global a:hover underline for these card links (app.css sets underline on all links) */
+  .admin-overview-card,
+  .admin-overview-card:hover {
+    text-decoration: none !important;
+  }
+</style>

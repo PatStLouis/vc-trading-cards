@@ -7,20 +7,27 @@
   import TradingCard from '$lib/components/Card.svelte';
   import AppIcon from '$lib/components/AppIcon.svelte';
   import { activeCard } from '$lib/stores/activeCard';
-  import { registerPasskey, isWebAuthnAvailable } from '$lib/webauthn';
+  import { fetchApi, apiUrl } from '$lib/api';
+  import { page } from '$app/stores';
 
   type SetInfo = { id: string; name: string; card_back_path?: string };
-  let user: { username: string; wallet_id: string; is_admin?: boolean; has_passkey?: boolean; passkey_count?: number } | null = $state(null);
+  let user: { username: string; wallet_id: string; is_admin?: boolean } | null = $state(null);
   let cards: Array<Record<string, unknown>> = $state([]);
   let sets: SetInfo[] = $state([]);
   let loading = $state(true);
   let error = $state('');
   let syncing = $state(false);
   let syncMessage = $state('');
-  let passkeyAdding = $state(false);
-  let passkeyMessage = $state('');
 
-  const API = import.meta.env.VITE_API_URL ?? '';
+  let dismissAdminNotice = $state(false);
+
+  const API = apiUrl();
+  const showAdminRequiredNotice = $derived(
+    !dismissAdminNotice &&
+    $page.url.searchParams.get('admin_required') === '1' &&
+    user !== null &&
+    !user.is_admin
+  );
 
   function imageUrl(path: string): string {
     if (!path) return '';
@@ -43,9 +50,9 @@
   onMount(async () => {
     try {
       const [meRes, credsRes, setsRes] = await Promise.all([
-        fetch(`${API || ''}/api/me`, { credentials: 'include' }),
-        fetch(`${API || ''}/api/wallet/credentials`, { credentials: 'include' }),
-        fetch(`${API || ''}/api/public/sets`)
+        fetchApi('/api/me', { auth: true }),
+        fetchApi('/api/wallet/cards', { auth: true }),
+        fetchApi('/api/public/sets')
       ]);
       if (meRes.status === 401) {
         goto('/');
@@ -101,23 +108,8 @@
   });
 
   async function logout() {
-    await fetch(`${API || ''}/auth/logout`, { method: 'POST', credentials: 'include' });
+    await fetchApi('/auth/logout', { method: 'POST', auth: true });
     goto('/');
-  }
-
-  async function addPasskey() {
-    if (!user || passkeyAdding || !isWebAuthnAvailable()) return;
-    passkeyAdding = true;
-    passkeyMessage = '';
-    try {
-      const data = await registerPasskey();
-      passkeyMessage = data.message || 'Passkey added.';
-      user = { ...user, passkey_count: (user?.passkey_count ?? 0) + 1, has_passkey: true };
-    } catch {
-      passkeyMessage = 'Failed';
-    } finally {
-      passkeyAdding = false;
-    }
   }
 
   async function syncCollection() {
@@ -125,7 +117,7 @@
     syncing = true;
     syncMessage = '';
     try {
-      const res = await fetch(`${API || ''}/api/me/collection/sync`, { method: 'POST', credentials: 'include' });
+      const res = await fetchApi('/api/wallet/cards/sync', { method: 'POST', auth: true });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         syncMessage = data.message || 'Collection synced. You now appear in Explore.';
@@ -182,6 +174,8 @@
         <div class="flex items-center gap-2">
           {#if user}
             <Button variant="ghost" size="sm" href="/search">Explore</Button>
+            <Button variant="outline" size="sm" href="/wallet/profile">Profile</Button>
+            <Button variant="outline" size="sm" href="/wallet/account">Account</Button>
             {#if user.is_admin}
               <Button variant="outline" size="sm" href="/admin">Admin</Button>
             {/if}
@@ -189,6 +183,14 @@
           {/if}
         </div>
       </div>
+      {#if showAdminRequiredNotice}
+        <div class="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 flex items-start gap-3">
+          <p class="text-amber-200 text-sm flex-1">
+            Admin access is only available to users listed in <code class="font-mono text-xs bg-black/20 px-1 rounded">ADMIN_DISCORD_IDS</code> in the backend <code class="font-mono text-xs bg-black/20 px-1 rounded">.env</code>. Add your Discord user ID there (comma-separated for multiple admins), then restart the backend and log in again.
+          </p>
+          <Button variant="ghost" size="sm" class="shrink-0 text-amber-300 hover:text-amber-200" onclick={() => { dismissAdminNotice = true; goto('/wallet', { replaceState: true }); }} aria-label="Dismiss">×</Button>
+        </div>
+      {/if}
       {#if !loading && !error && cards.length >= 0}
         <div class="wallet-header__stat mt-4 flex flex-wrap items-center gap-2">
           <div class="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-4 py-1.5 text-sm font-medium">
@@ -198,24 +200,8 @@
           <Button variant="outline" size="sm" class="rounded-full" onclick={syncCollection} disabled={syncing || cards.length === 0}>
             {syncing ? 'Syncing…' : 'Sync to Explore'}
           </Button>
-          {#if isWebAuthnAvailable()}
-            <Button variant="outline" size="sm" class="rounded-full" onclick={addPasskey} disabled={passkeyAdding}>
-              {#if passkeyAdding}
-                Adding…
-              {:else if (user?.passkey_count ?? 0) > 0}
-                Add another passkey
-              {:else}
-                Add passkey
-              {/if}
-            </Button>
-          {/if}
           {#if syncMessage}
             <span class="text-xs text-muted-foreground">{syncMessage}</span>
-          {/if}
-          {#if passkeyMessage === 'Failed'}
-            <span class="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium bg-destructive/10 text-destructive/90 border border-destructive/20" role="status">Failed</span>
-          {:else if passkeyMessage}
-            <span class="text-xs text-muted-foreground">{passkeyMessage}</span>
           {/if}
         </div>
       {/if}

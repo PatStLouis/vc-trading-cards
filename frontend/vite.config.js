@@ -7,6 +7,15 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const pwaIconSrc = (env.VITE_APP_ICON_URL || '').trim() || '/favicon.png';
   const pwaIconType = pwaIconSrc.toLowerCase().endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+  const isDefaultFavicon = !(env.VITE_APP_ICON_URL || '').trim();
+  const pwaIcons = isDefaultFavicon
+    ? []
+    : [
+        { src: pwaIconSrc, sizes: 'any', type: pwaIconType, purpose: 'any' },
+        { src: pwaIconSrc, sizes: '192x192', type: pwaIconType, purpose: 'any' },
+        { src: pwaIconSrc, sizes: '512x512', type: pwaIconType, purpose: 'any' },
+        { src: pwaIconSrc, sizes: '512x512', type: pwaIconType, purpose: 'maskable' }
+      ];
 
   return {
   plugins: [
@@ -28,15 +37,11 @@ export default defineConfig(({ mode }) => {
         id: '/',
         categories: ['entertainment', 'games'],
         orientation: 'any',
-        icons: [
-          { src: pwaIconSrc, sizes: 'any', type: pwaIconType, purpose: 'any' },
-          { src: pwaIconSrc, sizes: '192x192', type: pwaIconType, purpose: 'any' },
-          { src: pwaIconSrc, sizes: '512x512', type: pwaIconType, purpose: 'any' },
-          { src: pwaIconSrc, sizes: '512x512', type: pwaIconType, purpose: 'maskable' }
-        ]
+        icons: pwaIcons
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // In dev, dev-dist only has sw.js and workbox-*.js (ignored), so glob would match nothing and warn
+        globPatterns: mode === 'development' ? [] : ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback: '/',
         navigateFallbackDenylist: [/^\/api/, /^\/auth/, /^\/uploads/],
         // Ensure "/" is in the precache so createHandlerBoundToURL('/') does not throw (non-precached-url)

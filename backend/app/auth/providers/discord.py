@@ -6,20 +6,20 @@ from config import get_settings
 _settings = get_settings()
 
 
-def get_authorize_url(state: str) -> str:
-    redirect_uri = _settings.discord_redirect_uri or f"{_settings.backend_url.rstrip('/')}/auth/callback"
+def get_authorize_url(state: str, redirect_uri: str | None = None) -> str:
+    redirect_uri = redirect_uri or _settings.discord_redirect_uri or f"{_settings.backend_url.rstrip('/')}/auth/callback"
     params = {
         "client_id": _settings.discord_client_id,
         "redirect_uri": redirect_uri,
         "response_type": "code",
-        "scope": "identify email",
+        "scope": "identify",
         "state": state,
     }
     return f"{_settings.discord_authorize_url}?{urlencode(params)}"
 
 
-async def exchange_code_for_tokens(code: str) -> dict | None:
-    redirect_uri = _settings.discord_redirect_uri or f"{_settings.backend_url.rstrip('/')}/auth/callback"
+async def exchange_code_for_tokens(code: str, redirect_uri: str | None = None) -> dict | None:
+    redirect_uri = redirect_uri or _settings.discord_redirect_uri or f"{_settings.backend_url.rstrip('/')}/auth/callback"
     async with httpx.AsyncClient() as client:
         r = await client.post(
             _settings.discord_token_url,

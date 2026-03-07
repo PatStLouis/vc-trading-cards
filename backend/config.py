@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     discord_bot_token: str = os.getenv("DISCORD_BOT_TOKEN", "")
     discord_public_key: str = os.getenv("DISCORD_PUBLIC_KEY", "")
 
+    # Twitch OAuth (login + bind)
+    twitch_client_id: str = os.getenv("TWITCH_CLIENT_ID", "")
+    twitch_client_secret: str = os.getenv("TWITCH_CLIENT_SECRET", "")
+    twitch_redirect_uri: str = os.getenv("TWITCH_REDIRECT_URI", "")
+
     # Session / JWT
     secret_key: str = os.getenv("SECRET_KEY", "change-me-in-production")
     session_cookie_name: str = "tritone_cards_session"
@@ -38,6 +43,9 @@ class Settings(BaseSettings):
 
     # Admin: comma-separated Discord user IDs allowed to access /admin
     admin_discord_ids: str = os.getenv("ADMIN_DISCORD_IDS", "")
+    admin_twitch_ids: str = os.getenv("ADMIN_TWITCH_IDS", "")
+    # Optional: API key for admin access (header X-Admin-API-Key or Authorization: Bearer <key>)
+    admin_api_key: str = os.getenv("ADMIN_API_KEY", "")
 
     # Uploads: directory for card images (relative to cwd or absolute). Served at /uploads.
     upload_dir: str = os.getenv("UPLOAD_DIR", "uploads")
@@ -46,6 +54,11 @@ class Settings(BaseSettings):
     webauthn_rp_id: str = os.getenv("WEBAUTHN_RP_ID", "")  # e.g. localhost or app.example.com
     webauthn_rp_name: str = os.getenv("WEBAUTHN_RP_NAME", "Tritone Cards")
     webauthn_origin: str = os.getenv("WEBAUTHN_ORIGIN", "")  # e.g. http://localhost:5175
+
+    # Security: rate limiting (per IP). Set RATE_LIMIT_ENABLED=1 to enable.
+    rate_limit_enabled: bool = os.getenv("RATE_LIMIT_ENABLED", "0").strip().lower() in ("1", "true", "yes")
+    rate_limit_requests: int = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))
+    rate_limit_window_seconds: int = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 
     @property
     def webauthn_rp_id_resolved(self) -> str:
