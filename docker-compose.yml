@@ -1,16 +1,15 @@
-# Run backend + Postgres (and optionally agent, ocr) on a shared network.
-# Backend build is fast without OCR; run the ocr service for card image analysis (suggested fields).
+# Backend + Postgres + optional frontend. Two ways to run:
 #
-# Single domain (API + SPA in one container):
-#   docker compose up -d postgres app
-#   Set BACKEND_URL and FRONTEND_URL in backend/.env to your public URL (e.g. https://tritone.cards).
-#   Build arg VITE_API_URL (default below) should match.
+# One container (API + SPA):  docker compose up -d postgres app
+#   Build from repo root. Set BACKEND_URL and FRONTEND_URL in backend/.env (e.g. https://tritone.cards).
+#   VITE_API_URL at build time should match (e.g. VITE_API_URL=https://tritone.cards docker compose up -d --build postgres app).
 #
-# Two domains (separate frontend):
-#   docker compose up -d postgres backend
+# Two containers (frontend = nginx):  docker compose up -d postgres backend frontend
+#   Frontend on 80, backend on 8000. Two domains or reverse-proxy for single domain.
+#
 #   docker compose up -d ocr   # optional: for /analyze-card-image OCR
 #
-# Backend needs DISCORD_* and SECRET_KEY in backend/.env. DATABASE_URL below overrides .env when using Docker.
+# Backend needs DISCORD_*, SECRET_KEY, BACKEND_URL, FRONTEND_URL in backend/.env.
 
 services:
   postgres:
@@ -27,7 +26,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # Single-domain: API + SPA in one image. Use with postgres (and optional ocr).
+  # One container: API + SPA (Dockerfile.combined). Use with postgres. Single domain.
   app:
     build:
       context: .
@@ -80,6 +79,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
     ports:
       - "80:80"
     depends_on:

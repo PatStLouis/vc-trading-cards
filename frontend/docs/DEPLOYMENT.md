@@ -1,41 +1,34 @@
 # Deploying the frontend (tritone.cards)
 
-## Single domain (recommended): one container
+## Normal deploy: frontend served by nginx, backend is API only
 
-Use **one URL** (e.g. `https://tritone.cards`). The backend serves both the API and the SPA; no separate frontend host or `_app` config.
+The frontend is a static SPA served by nginx (or any static host). The backend serves only the API; it does not serve the SPA.
 
-**1. In `backend/.env`** set (and fill the rest: Discord/Twitch, `SECRET_KEY`, `ADMIN_DISCORD_IDS`, etc.):
-
-```bash
-BACKEND_URL=https://tritone.cards
-FRONTEND_URL=https://tritone.cards
-DATABASE_URL=postgresql://user:pass@host:5432/tritone_cards   # or use docker compose postgres below
-```
-
-**2. Discord/Twitch app**  
-Set redirect/callback URL to: `https://tritone.cards/auth/callback`
-
-**3. Build and run**
-
-From **repo root**:
+**With Docker Compose** (from repo root):
 
 ```bash
-# Build (frontend will call the same domain as the API)
-docker build -f Dockerfile.combined --build-arg VITE_API_URL=https://tritone.cards -t tritone-cards .
+# In backend/.env set BACKEND_URL, FRONTEND_URL, Discord/Twitch, SECRET_KEY, ADMIN_DISCORD_IDS, etc.
+# For two domains: BACKEND_URL=https://api.tritone.cards, FRONTEND_URL=https://tritone.cards
+# For single domain behind one proxy: set both to your single URL.
 
-# Run (if you already have Postgres elsewhere, set DATABASE_URL in backend/.env)
-docker run -p 8000:8000 --env-file backend/.env tritone-cards
+docker compose up -d postgres backend frontend
+# Optional: docker compose up -d ocr
 ```
 
-**4. Run with Docker Compose (Postgres + app)**
+- **Frontend (SPA)** is served by the `frontend` container on **port 80** (nginx; serves `/_app/*` correctly).
+- **Backend (API)** is on **port 8000**.
 
-From repo root, set in `backend/.env`: `BACKEND_URL`, `FRONTEND_URL` (e.g. `https://tritone.cards`), and optionally `VITE_API_URL` for the build (defaults to `https://tritone.cards`). Then:
+Build the frontend with the API URL so the SPA calls the right backend:
 
 ```bash
-VITE_API_URL=https://tritone.cards docker compose up -d postgres app
+VITE_API_URL=https://api.tritone.cards docker compose up -d --build postgres backend frontend
 ```
 
-(Or leave `VITE_API_URL` unset to use the default.) Point **tritone.cards** at the host with a reverse proxy (TLS) to port 8000. Done.
+(Use your real backend URL. For single domain with a reverse proxy, use that URL.)
+
+**Two domains:** Point tritone.cards at the host for port 80 (frontend), api.tritone.cards at the host for port 8000 (backend). Set Discord/Twitch redirect to `https://api.tritone.cards/auth/callback`.
+
+**Single domain:** Put a reverse proxy in front: route `/`, `/_app`, `/favicon`, etc. to frontend:80, and `/auth`, `/api`, `/uploads`, `/docs`, etc. to backend:8000.
 
 ---
 
@@ -95,27 +88,6 @@ The frontend must be built with the API base URL, then the **entire** `build/` o
 | Frontend build   | `VITE_API_URL=https://api.tritone.cards` |
 | Discord/Twitch   | Redirect/callback URL = `https://api.tritone.cards/auth/callback` |
 | tritone.cards    | Serve full `build/` (including `_app/`); SPA fallback only for non-file routes |
-
----
-
-## Easiest: one container (backend serves the SPA)
-
-From **repo root**:
-
-```bash
-docker build -f Dockerfile.combined -t tritone-cards .
-docker run -p 8000:8000 --env-file backend/.env tritone-cards
-```
-
-Set `BACKEND_URL` and `FRONTEND_URL` in `.env` to your public URL (e.g. `https://tritone.cards`). The backend serves the API, auth, uploads, **and** the SPA; `/_app/*` and `/` work correctly (no MIME type errors).
-
-To pass the API URL into the frontend at build time:
-
-```bash
-docker build -f Dockerfile.combined --build-arg VITE_API_URL=https://tritone.cards -t tritone-cards .
-```
-
-Alternatively, run the backend with `FRONTEND_BUILD_DIR` set to a path that contains the frontend `build/` (with `index.html` and `_app/`).
 
 ---
 

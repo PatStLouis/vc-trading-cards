@@ -76,28 +76,31 @@ app.include_router(public_router)
 os.makedirs(settings.upload_dir, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
 
+# Optional: serve SPA from this directory (used by Dockerfile.combined). Mount /_app first so JS/CSS get correct MIME types.
 _frontend_build_dir = (settings.frontend_build_dir or "").strip()
+_serving_spa = False
 if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
     _index_path = os.path.join(_frontend_build_dir, "index.html")
-    if os.path.isfile(_index_path) and os.path.isdir(os.path.join(_frontend_build_dir, "_app")):
+    _app_dir = os.path.join(_frontend_build_dir, "_app")
+    if os.path.isfile(_index_path) and os.path.isdir(_app_dir):
+        app.mount("/_app", StaticFiles(directory=_app_dir, html=False), name="frontend_app")
         app.mount("/", StaticFiles(directory=_frontend_build_dir, html=True), name="frontend")
+        _serving_spa = True
 
         @app.exception_handler(404)
         async def _spa_fallback(request: Request, _exc):
             if request.method != "GET":
-                from fastapi import HTTPException
-                raise HTTPException(404)
+                return JSONResponse(status_code=404, content={"detail": "Not Found"})
             path = request.url.path
-            if path.startswith(("/api", "/auth", "/uploads", "/.well-known", "/docs", "/openapi.json", "/redoc")):
-                from fastapi import HTTPException
-                raise HTTPException(404)
+            if path.startswith(("/api", "/auth", "/uploads", "/_app", "/.well-known", "/docs", "/openapi.json", "/redoc")):
+                return JSONResponse(status_code=404, content={"detail": "Not Found"})
             return FileResponse(_index_path, media_type="text/html")
     else:
         logging.getLogger("uvicorn.error").warning(
             "FRONTEND_BUILD_DIR=%r missing index.html or _app/; not serving SPA", _frontend_build_dir,
         )
 
-if not _frontend_build_dir or not os.path.isdir(_frontend_build_dir) or not os.path.isfile(os.path.join(_frontend_build_dir, "index.html")):
+if not _serving_spa:
     @app.get("/")
     async def root():
         return {"service": "Tritone Cards API", "docs": "/docs"}
