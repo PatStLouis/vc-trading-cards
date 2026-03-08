@@ -1,6 +1,13 @@
 # Single-image deploy: backend serves the SPA so one container does everything.
-# Build from repo root: docker build -f Dockerfile.combined -t tritone-cards .
+# Build context MUST be repo root (directory that contains frontend/ and backend/).
+#   From repo root: docker build -f Dockerfile.combined -t tritone-cards .
+#   Or: docker compose build app   (from repo root)
 # Run with backend .env; set FRONTEND_URL and BACKEND_URL to your public URL (e.g. https://tritone.cards).
+
+# Validate build context is repo root (fail fast with clear error)
+FROM alpine AS validate
+COPY docker-compose.yml /tmp/
+RUN test -f /tmp/docker-compose.yml || (echo "ERROR: Build context must be repo root (directory containing frontend/ and backend/). Run: docker build -f Dockerfile.combined -t tritone-cards . from repo root." && exit 1)
 
 # Stage 1: frontend build
 FROM node:20-alpine AS frontend
