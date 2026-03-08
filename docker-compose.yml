@@ -1,11 +1,10 @@
-# Run backend + Postgres (and optionally agent) on a shared network so backend can reach the DB.
-# From repo root:
-#   docker compose up -d postgres   # start DB first (backend depends on it)
-#   docker compose up -d backend   # then backend (or run both: docker compose up -d)
-#   docker compose up -d agent     # optional
+# Run backend + Postgres (and optionally agent, ocr) on a shared network.
+# Backend build is fast without OCR; run the ocr service for card image analysis (suggested fields).
 #
-# Backend needs DISCORD_* and SECRET_KEY in backend/.env. DATABASE_URL below overrides .env
-# so the backend always connects to the postgres service (do not use localhost in .env when running in Docker).
+#   docker compose up -d postgres backend   # backend builds in ~1 min
+#   docker compose up -d ocr               # optional: for /analyze-card-image OCR
+#
+# Backend needs DISCORD_* and SECRET_KEY in backend/.env. DATABASE_URL below overrides .env when using Docker.
 
 services:
   postgres:
@@ -35,6 +34,7 @@ services:
       ACAPY_ADMIN_URL: http://agent:8020
       BACKEND_URL: http://localhost:8000
       FRONTEND_URL: http://localhost:5173
+      OCR_SERVICE_URL: http://ocr:8001
     depends_on:
       postgres:
         condition: service_healthy
@@ -60,3 +60,13 @@ services:
       - "80:80"
     depends_on:
       - backend
+
+  ocr:
+    build:
+      context: ./ocr-service
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    # Uses same key as backend: env_file gives ocr ADMIN_API_KEY so it validates X-OCR-API-Key from backend
+    env_file:
+      - ./backend/.env

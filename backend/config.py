@@ -52,7 +52,14 @@ class Settings(BaseSettings):
     # Uploads: directory for card images (relative to cwd or absolute). Served at /uploads.
     upload_dir: str = os.getenv("UPLOAD_DIR", "uploads")
 
-    # WebAuthn (passkeys): RP id and origin. Defaults derived from frontend_url.
+    # Optional: serve the SPA from this directory (frontend build). When set, GET / returns index.html
+    # and /_app/* are served as static files; API/auth/uploads unchanged. Use for single-origin deploy.
+    frontend_build_dir: str = os.getenv("FRONTEND_BUILD_DIR", "")
+
+    # Optional: OCR microservice URL for card image analysis (e.g. http://ocr:8001). If set, OCR via HTTP.
+    ocr_service_url: str = os.getenv("OCR_SERVICE_URL", "")
+
+    # WebAuthn (passkeys)
     webauthn_rp_id: str = os.getenv("WEBAUTHN_RP_ID", "")  # e.g. localhost or app.example.com
     webauthn_rp_name: str = os.getenv("WEBAUTHN_RP_NAME", "Tritone Cards")
     webauthn_origin: str = os.getenv("WEBAUTHN_ORIGIN", "")  # e.g. http://localhost:5175

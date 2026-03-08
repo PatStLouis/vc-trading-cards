@@ -1,5 +1,26 @@
 # Deploying the frontend (tritone.cards)
 
+## Easiest: one container (backend serves the SPA)
+
+From **repo root**:
+
+```bash
+docker build -f Dockerfile.combined -t tritone-cards .
+docker run -p 8000:8000 --env-file backend/.env tritone-cards
+```
+
+Set `BACKEND_URL` and `FRONTEND_URL` in `.env` to your public URL (e.g. `https://tritone.cards`). The backend serves the API, auth, uploads, **and** the SPA; `/_app/*` and `/` work correctly (no MIME type errors).
+
+To pass the API URL into the frontend at build time:
+
+```bash
+docker build -f Dockerfile.combined --build-arg VITE_API_URL=https://tritone.cards -t tritone-cards .
+```
+
+Alternatively, run the backend with `FRONTEND_BUILD_DIR` set to a path that contains the frontend `build/` (with `index.html` and `_app/`).
+
+---
+
 ## Build
 
 ```bash

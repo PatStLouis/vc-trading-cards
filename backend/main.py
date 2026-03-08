@@ -1,12 +1,11 @@
 from contextlib import asynccontextmanager
-import asyncio
 import logging
 import os
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 
 from config import get_settings
 from app.db import init_db, close_db
@@ -24,9 +23,6 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     await init_db()
     os.makedirs(settings.upload_dir, exist_ok=True)
-    # Preload EasyOCR in a thread so first card analyze request is fast; server stays responsive
-    from app.image_analysis import preload_ocr_reader
-    asyncio.create_task(asyncio.to_thread(preload_ocr_reader))
     if (
         (settings.secret_key or "").strip() in ("", "change-me-in-production")
         and settings.backend_url.strip().lower().startswith("https")
@@ -80,6 +76,32 @@ app.include_router(public_router)
 os.makedirs(settings.upload_dir, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
 
+_frontend_build_dir = (settings.frontend_build_dir or "").strip()
+if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
+    _index_path = os.path.join(_frontend_build_dir, "index.html")
+    if os.path.isfile(_index_path) and os.path.isdir(os.path.join(_frontend_build_dir, "_app")):
+        app.mount("/", StaticFiles(directory=_frontend_build_dir, html=True), name="frontend")
+
+        @app.exception_handler(404)
+        async def _spa_fallback(request: Request, _exc):
+            if request.method != "GET":
+                from fastapi import HTTPException
+                raise HTTPException(404)
+            path = request.url.path
+            if path.startswith(("/api", "/auth", "/uploads", "/.well-known", "/docs", "/openapi.json", "/redoc")):
+                from fastapi import HTTPException
+                raise HTTPException(404)
+            return FileResponse(_index_path, media_type="text/html")
+    else:
+        logging.getLogger("uvicorn.error").warning(
+            "FRONTEND_BUILD_DIR=%r missing index.html or _app/; not serving SPA", _frontend_build_dir,
+        )
+
+if not _frontend_build_dir or not os.path.isdir(_frontend_build_dir) or not os.path.isfile(os.path.join(_frontend_build_dir, "index.html")):
+    @app.get("/")
+    async def root():
+        return {"service": "Tritone Cards API", "docs": "/docs"}
+
 
 def _did_web_id_from_url(url: str) -> str:
     """Build did:web identifier from backend URL (e.g. https://api.example.com -> did:web:api.example.com)."""
@@ -116,11 +138,6 @@ async def well_known_did():
         media_type="application/did+ld+json",
         headers={"Cache-Control": "max-age=300"},
     )
-
-
-@app.get("/")
-async def root():
-    return {"service": "Tritone Cards API", "docs": "/docs"}
 
 
 @app.get("/poser/{username}/did.json", response_class=JSONResponse)
