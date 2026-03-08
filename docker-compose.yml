@@ -1,8 +1,14 @@
 # Run backend + Postgres (and optionally agent, ocr) on a shared network.
 # Backend build is fast without OCR; run the ocr service for card image analysis (suggested fields).
 #
-#   docker compose up -d postgres backend   # backend builds in ~1 min
-#   docker compose up -d ocr               # optional: for /analyze-card-image OCR
+# Single domain (API + SPA in one container):
+#   docker compose up -d postgres app
+#   Set BACKEND_URL and FRONTEND_URL in backend/.env to your public URL (e.g. https://tritone.cards).
+#   Build arg VITE_API_URL (default below) should match.
+#
+# Two domains (separate frontend):
+#   docker compose up -d postgres backend
+#   docker compose up -d ocr   # optional: for /analyze-card-image OCR
 #
 # Backend needs DISCORD_* and SECRET_KEY in backend/.env. DATABASE_URL below overrides .env when using Docker.
 
@@ -20,6 +26,24 @@ services:
       interval: 2s
       timeout: 5s
       retries: 5
+
+  # Single-domain: API + SPA in one image. Use with postgres (and optional ocr).
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.combined
+      args:
+        VITE_API_URL: ${VITE_API_URL:-https://tritone.cards}
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/tritone_cards
+      OCR_SERVICE_URL: http://ocr:8001
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   backend:
     build:
