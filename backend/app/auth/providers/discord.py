@@ -7,7 +7,7 @@ _settings = get_settings()
 
 
 def get_authorize_url(state: str, redirect_uri: str | None = None) -> str:
-    redirect_uri = redirect_uri or _settings.discord_redirect_uri or f"{_settings.backend_url.rstrip('/')}/auth/callback"
+    redirect_uri = redirect_uri or _settings.discord_redirect_uri or _settings.oauth_redirect_uri
     params = {
         "client_id": _settings.discord_client_id,
         "redirect_uri": redirect_uri,
@@ -19,7 +19,7 @@ def get_authorize_url(state: str, redirect_uri: str | None = None) -> str:
 
 
 async def exchange_code_for_tokens(code: str, redirect_uri: str | None = None) -> dict | None:
-    redirect_uri = redirect_uri or _settings.discord_redirect_uri or f"{_settings.backend_url.rstrip('/')}/auth/callback"
+    redirect_uri = redirect_uri or _settings.discord_redirect_uri or _settings.oauth_redirect_uri
     async with httpx.AsyncClient() as client:
         r = await client.post(
             _settings.discord_token_url,

@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import asyncio
 import logging
 import os
 
@@ -23,6 +24,9 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     await init_db()
     os.makedirs(settings.upload_dir, exist_ok=True)
+    # Preload EasyOCR in a thread so first card analyze request is fast; server stays responsive
+    from app.image_analysis import preload_ocr_reader
+    asyncio.create_task(asyncio.to_thread(preload_ocr_reader))
     if (
         (settings.secret_key or "").strip() in ("", "change-me-in-production")
         and settings.backend_url.strip().lower().startswith("https")

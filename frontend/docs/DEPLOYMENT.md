@@ -26,6 +26,8 @@ The server must:
 2. **Serve existing files with correct MIME types** (e.g. `.js` → `application/javascript`).
 3. **Only** serve `index.html` for requests that do **not** match a file or directory.
 
+**If you use the frontend Docker image:** Rebuild the image after pulling the latest Dockerfile. The Dockerfile now checks that `build/_app/` exists after `npm run build` and configures nginx so `/_app/*` never returns `index.html`. If the image builds successfully, the container has the right files; redeploy that image.
+
 ### Nginx
 
 ```nginx

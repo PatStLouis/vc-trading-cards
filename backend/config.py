@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     # Discord OIDC
     discord_client_id: str = os.getenv("DISCORD_CLIENT_ID", "")
     discord_client_secret: str = os.getenv("DISCORD_CLIENT_SECRET", "")
+    # Optional. Defaults to BACKEND_URL + /auth/callback. Set only if your public callback URL differs.
     discord_redirect_uri: str = os.getenv("DISCORD_REDIRECT_URI", "")
 
     # Discord Bot (slash commands via Interactions API)
@@ -23,6 +24,7 @@ class Settings(BaseSettings):
     # Twitch OAuth (login + bind)
     twitch_client_id: str = os.getenv("TWITCH_CLIENT_ID", "")
     twitch_client_secret: str = os.getenv("TWITCH_CLIENT_SECRET", "")
+    # Optional. Defaults to BACKEND_URL + /auth/callback. Set only if your public callback URL differs.
     twitch_redirect_uri: str = os.getenv("TWITCH_REDIRECT_URI", "")
 
     # Session / JWT
@@ -75,6 +77,11 @@ class Settings(BaseSettings):
         if self.webauthn_origin:
             return self.webauthn_origin.rstrip("/")
         return self.frontend_url.rstrip("/")
+
+    # OAuth callback URL for Discord and Twitch. Override with DISCORD_REDIRECT_URI / TWITCH_REDIRECT_URI if needed.
+    @property
+    def oauth_redirect_uri(self) -> str:
+        return f"{self.backend_url.rstrip('/')}/auth/callback"
 
     @property
     def discord_authorize_url(self) -> str:

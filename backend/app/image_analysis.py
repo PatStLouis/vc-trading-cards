@@ -2,7 +2,12 @@
 from __future__ import annotations
 
 import re
+import warnings
 from typing import Any
+
+# Max dimension (longest side) for OCR input. Card images are downscaled to this for fast OCR.
+# 1024 is a good balance for consistent card uploads: keeps text sharp, much faster than full-res.
+MAX_OCR_DIMENSION = 1024
 
 # Optional: OCR (EasyOCR = Python-only; no system Tesseract needed)
 _ocr_reader = None
@@ -13,11 +18,22 @@ def _get_ocr_reader():
     if _ocr_reader is not None:
         return _ocr_reader
     try:
+        # Suppress PyTorch DataLoader pin_memory warning when no GPU is available (EasyOCR uses torch)
+        warnings.filterwarnings(
+            "ignore",
+            message=".*pin_memory.*",
+            category=UserWarning,
+        )
         import easyocr
         _ocr_reader = easyocr.Reader(["en"], gpu=False, verbose=False)
         return _ocr_reader
     except Exception:
         return None
+
+
+def preload_ocr_reader() -> None:
+    """Load the EasyOCR model in the current thread. Call at startup so first analyze request is fast."""
+    _get_ocr_reader()
 
 
 def _ocr_image_to_string(img) -> str | None:
@@ -27,6 +43,11 @@ def _ocr_image_to_string(img) -> str | None:
         return None
     try:
         import numpy as np
+        w, h = img.size
+        if max(w, h) > MAX_OCR_DIMENSION:
+            ratio = MAX_OCR_DIMENSION / max(w, h)
+            new_size = (int(w * ratio), int(h * ratio))
+            img = img.resize(new_size, getattr(Image, "Resampling", Image).LANCZOS)
         arr = np.array(img)
         if len(arr.shape) == 2:
             arr = np.stack([arr] * 3, axis=-1)
@@ -49,10 +70,11 @@ except ImportError:
     HAS_PIL = False
 
 
-def analyze_image(data: bytes, content_type: str | None = None) -> dict[str, Any]:
+def analyze_image(data: bytes, content_type: str | None = None, run_ocr: bool = True) -> dict[str, Any]:
     """
     Analyze image bytes. Returns format, dimensions, EXIF/ICC flags,
     and optional suggested card fields from OCR (name, quote, photograph, number).
+    Set run_ocr=False for metadata-only (faster).
     """
     result: dict[str, Any] = {
         "format": None,
@@ -85,10 +107,11 @@ def analyze_image(data: bytes, content_type: str | None = None) -> dict[str, Any
     if exif and len(exif):
         result["has_exif"] = True
 
-    raw_text = _ocr_image_to_string(img)
-    if raw_text:
-        result["raw_text"] = raw_text
-        result["suggested"] = _suggest_fields_from_text(raw_text)
+    if run_ocr:
+        raw_text = _ocr_image_to_string(img)
+        if raw_text:
+            result["raw_text"] = raw_text
+            result["suggested"] = _suggest_fields_from_text(raw_text)
 
     return result
 

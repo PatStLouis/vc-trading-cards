@@ -34,11 +34,11 @@ STATE_PREFIX_TWITCH = "twitch:"
 
 
 def _callback_redirect_uri() -> str:
-    return settings.discord_redirect_uri or f"{settings.backend_url.rstrip('/')}{CALLBACK_PATH}"
+    return settings.discord_redirect_uri or settings.oauth_redirect_uri
 
 
 def _twitch_redirect_uri() -> str:
-    return settings.twitch_redirect_uri or f"{settings.backend_url.rstrip('/')}{CALLBACK_PATH}"
+    return settings.twitch_redirect_uri or settings.oauth_redirect_uri
 
 
 def _frontend_redirect(path: str = "", query: str = "") -> RedirectResponse:

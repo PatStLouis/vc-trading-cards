@@ -1,4 +1,5 @@
 """Admin dashboard API: stats, user list, card sets and cards. Requires user to be in ADMIN_DISCORD_IDS."""
+import asyncio
 import os
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, Body
 from app.dependencies import get_current_admin
@@ -237,10 +238,12 @@ ANALYZE_IMAGE_RESPONSE = {
 async def analyze_card_image(
     _admin: dict = Depends(get_current_admin),
     image: UploadFile = File(...),
+    ocr: bool = True,
 ):
     """
     Analyze an image file: format, dimensions, EXIF/ICC, and optional OCR suggestions
     (name, quote, photographer, card number). Use before or when adding a card to pre-fill form.
+    Set ocr=false for metadata-only (faster, no suggested fields).
     """
     if not image.filename:
         raise HTTPException(status_code=400, detail="No file provided")
@@ -253,7 +256,7 @@ async def analyze_card_image(
         raise HTTPException(status_code=400, detail=f"Failed to read file: {e}")
     if len(contents) > 20 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large (max 20MB)")
-    result = analyze_image(contents)
+    result = await asyncio.to_thread(analyze_image, contents, None, ocr)
     if result.get("error"):
         raise HTTPException(status_code=400, detail=result["error"])
     return result
