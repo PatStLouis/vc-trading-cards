@@ -42,10 +42,14 @@ export default defineConfig(({ mode }) => {
       workbox: {
         // In dev, dev-dist only has sw.js and workbox-*.js (ignored), so glob would match nothing and warn
         globPatterns: mode === 'development' ? [] : ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Don't precache the document so deploy updates always get fresh HTML (correct chunk hashes)
+        globIgnores: ['**/index.html', 'index.html'],
         navigateFallback: '/',
         navigateFallbackDenylist: [/^\/api/, /^\/auth/, /^\/uploads/],
-        // Ensure "/" is in the precache so createHandlerBoundToURL('/') does not throw (non-precached-url)
-        additionalManifestEntries: [{ url: '/', revision: null }]
+        // New SW activates immediately and removes old caches so next load gets fresh HTML
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true
       }
     })
   ],

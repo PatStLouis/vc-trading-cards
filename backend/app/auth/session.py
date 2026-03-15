@@ -40,3 +40,21 @@ def decode_session(token: str) -> dict[str, Any] | None:
         return json.loads(payload)
     except Exception:
         return None
+
+
+def session_cookie_kwargs(token: str) -> dict[str, Any]:
+    """Kwargs for Response.set_cookie(). Use SameSite=None when frontend and backend are on different origins."""
+    s = get_settings()
+    kwargs = {
+        "key": s.session_cookie_name,
+        "value": token,
+        "max_age": s.session_ttl_seconds,
+        "httponly": True,
+    }
+    if s.cross_origin_deploy and s.backend_url.strip().lower().startswith("https"):
+        kwargs["samesite"] = "none"
+        kwargs["secure"] = True
+    else:
+        kwargs["samesite"] = "lax"
+        kwargs["secure"] = s.backend_url.strip().lower().startswith("https")
+    return kwargs

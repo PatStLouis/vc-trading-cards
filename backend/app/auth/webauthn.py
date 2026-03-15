@@ -22,7 +22,7 @@ from webauthn.helpers.structs import (
     UserVerificationRequirement,
 )
 
-from .session import encode_session
+from .session import encode_session, session_cookie_kwargs
 from app.db import (
     get_tenant_by_user_id,
     webauthn_save_credential,
@@ -225,12 +225,5 @@ async def login_verify(request: Request, response: Response):
     }
     token = encode_session(session_data)
     res = JSONResponse(content={"ok": True, "redirect": "/wallet"})
-    res.set_cookie(
-        key=settings.session_cookie_name,
-        value=token,
-        max_age=settings.session_ttl_seconds,
-        httponly=True,
-        samesite="lax",
-        secure=settings.backend_url.startswith("https"),
-    )
+    res.set_cookie(**session_cookie_kwargs(token))
     return res

@@ -89,6 +89,24 @@ if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
         async def _serve_index():
             return FileResponse(_index_path, media_type="text/html", headers=_no_cache_headers)
 
+        # Serve SW and Workbox with no-cache so deploy updates are picked up immediately
+        _no_cache_headers_sw = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
+        _frontend_root = _frontend_build_dir
+
+        @app.get("/sw.js")
+        async def _serve_sw():
+            p = os.path.join(_frontend_root, "sw.js")
+            if os.path.isfile(p):
+                return FileResponse(p, media_type="application/javascript", headers=_no_cache_headers_sw)
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
+        @app.get("/workbox-{rest:path}")
+        async def _serve_workbox(rest: str):
+            p = os.path.join(_frontend_root, f"workbox-{rest}")
+            if os.path.isfile(p) and os.path.normpath(p).startswith(os.path.normpath(_frontend_root)):
+                return FileResponse(p, media_type="application/javascript", headers=_no_cache_headers_sw)
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
         app.mount("/_app", StaticFiles(directory=_app_dir, html=False), name="frontend_app")
         app.mount("/", StaticFiles(directory=_frontend_build_dir, html=True), name="frontend")
         _serving_spa = True

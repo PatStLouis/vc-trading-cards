@@ -11,7 +11,7 @@ from .providers.twitch import (
     exchange_code_for_tokens as twitch_exchange_code,
     get_twitch_user,
 )
-from .session import encode_session, decode_session
+from .session import encode_session, decode_session, session_cookie_kwargs
 from app.db import (
     get_or_create_user_by_provider,
     get_user_by_provider,
@@ -171,14 +171,7 @@ async def _handle_discord_callback(request: Request, code: str):
         }
         token = encode_session(session_data)
         resp = _frontend_redirect("/wallet")
-        resp.set_cookie(
-            key=settings.session_cookie_name,
-            value=token,
-            max_age=settings.session_ttl_seconds,
-            httponly=True,
-            samesite="lax",
-            secure=settings.backend_url.startswith("https"),
-        )
+        _set_session_cookie(resp, token)
         return resp
 
 
@@ -221,15 +214,12 @@ async def _handle_twitch_callback(request: Request, code: str):
         }
         token = encode_session(session_data)
         resp = _frontend_redirect("/wallet")
-        resp.set_cookie(
-            key=settings.session_cookie_name,
-            value=token,
-            max_age=settings.session_ttl_seconds,
-            httponly=True,
-            samesite="lax",
-            secure=settings.backend_url.startswith("https"),
-        )
+        _set_session_cookie(resp, token)
         return resp
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(**session_cookie_kwargs(token))
 
 
 @router.post("/logout")

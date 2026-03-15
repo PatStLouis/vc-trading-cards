@@ -70,6 +70,14 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
 
     @property
+    def cross_origin_deploy(self) -> bool:
+        """True when frontend and backend are on different origins (cookie must use SameSite=None)."""
+        from urllib.parse import urlparse
+        b = urlparse(self.backend_url)
+        f = urlparse(self.frontend_url)
+        return (b.hostname or "").lower() != (f.hostname or "").lower()
+
+    @property
     def webauthn_rp_id_resolved(self) -> str:
         """Resolve rp_id from env or frontend_url host."""
         if self.webauthn_rp_id:
