@@ -36,11 +36,99 @@
   let issueSubmitting = $state(false);
   let issueError = $state('');
 
+  let showDrawModal = $state(false);
+  let drawTargetSub = $state('');
+  let drawCount = $state(5);
+  let drawSubmitting = $state(false);
+  let drawError = $state('');
+  let drawResult: { drawn: CardItem[]; issuances: { card_id: string; issued_at: string }[] } | null = $state(null);
+
   let newSetName = $state('');
-  let newSetDescription = $state('');
-  let newSetType = $state('');
+  let newSetType = $state<'collection' | 'promo'>('collection');
   let newSetBackFile: File | null = $state(null);
+  let newSetCsvFile: File | null = $state(null);
+  let newSetZipFile: File | null = $state(null);
   let creatingSet = $state(false);
+  let newSetCsvDragging = $state(false);
+  let newSetZipDragging = $state(false);
+  let newSetBackDragging = $state(false);
+  let newSetCsvInputEl: HTMLInputElement | null = $state(null);
+  let newSetZipInputEl: HTMLInputElement | null = $state(null);
+  let newSetBackInputEl: HTMLInputElement | null = $state(null);
+
+  function isCsvFile(file: File): boolean {
+    const n = (file.name || '').toLowerCase();
+    return n.endsWith('.csv') || (file.type || '').toLowerCase().includes('csv');
+  }
+  function isZipFile(file: File): boolean {
+    const n = (file.name || '').toLowerCase();
+    return n.endsWith('.zip') || (file.type || '').toLowerCase().includes('zip');
+  }
+  function isImageFile(file: File): boolean {
+    const t = (file.type || '').toLowerCase();
+    return /^image\/(png|svg\+xml|jpeg|jpg|webp)$/.test(t) || /\.(png|svg|jpe?g|webp)$/i.test(file.name || '');
+  }
+
+  function onSetCsvChosen(file: File | null) {
+    if (file && !isCsvFile(file)) return;
+    newSetCsvFile = file;
+  }
+  function onSetZipChosen(file: File | null) {
+    if (file && !isZipFile(file)) return;
+    newSetZipFile = file;
+  }
+  function onSetBackChosen(file: File | null) {
+    if (file && !isImageFile(file)) return;
+    newSetBackFile = file;
+  }
+
+  function setCsvDrop(e: DragEvent) {
+    e.preventDefault();
+    newSetCsvDragging = false;
+    const file = e.dataTransfer?.files?.[0];
+    if (file) onSetCsvChosen(file);
+  }
+  function setZipDrop(e: DragEvent) {
+    e.preventDefault();
+    newSetZipDragging = false;
+    const file = e.dataTransfer?.files?.[0];
+    if (file) onSetZipChosen(file);
+  }
+  function setBackDrop(e: DragEvent) {
+    e.preventDefault();
+    newSetBackDragging = false;
+    const file = e.dataTransfer?.files?.[0];
+    if (file) onSetBackChosen(file);
+  }
+
+  function setCsvDragOver(e: DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    newSetCsvDragging = true;
+  }
+  function setZipDragOver(e: DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    newSetZipDragging = true;
+  }
+  function setBackDragOver(e: DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    newSetBackDragging = true;
+  }
+
+  function triggerSetCsvInput() {
+    newSetCsvInputEl?.click();
+  }
+  function triggerSetZipInput() {
+    newSetZipInputEl?.click();
+  }
+  function triggerSetBackInput() {
+    newSetBackInputEl?.click();
+  }
 
   onMount(async () => {
     try {
@@ -98,35 +186,39 @@
   function openCreateSet() {
     showCreateSet = true;
     newSetName = '';
-    newSetDescription = '';
-    newSetType = '';
+    newSetType = 'collection';
     newSetBackFile = null;
+    newSetCsvFile = null;
+    newSetZipFile = null;
   }
 
   async function createSet() {
-    if (!newSetName.trim()) return;
+    if (!newSetName.trim() || !newSetCsvFile || !newSetZipFile) return;
     creatingSet = true;
     error = '';
     success = '';
     try {
       const form = new FormData();
-      form.append('name', newSetName.trim());
-      form.append('slug', '');
-      form.append('description', newSetDescription.trim());
-      form.append('set_type', newSetType.trim());
+      form.append('csv_file', newSetCsvFile);
+      form.append('zip_file', newSetZipFile);
+      form.append('set_name', newSetName.trim());
+      form.append('set_type', newSetType);
       if (newSetBackFile) form.append('card_back', newSetBackFile);
-      const res = await fetchAdmin('/api/admin/sets', {
+      form.append('skip_existing', 'true');
+      const res = await fetchAdmin('/api/admin/provision-set-upload', {
         method: 'POST',
         body: form,
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'Failed to create set');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed to create set');
+      if (data.created && data.set) {
+        sets = [...sets.filter((s) => s.id !== data.set.id), data.set];
+        if (data.cards_created > 0 && selectedSet?.id === data.set.id) await loadCards(data.set.id);
+        success = `Set "${data.set.name}" created with ${data.cards_created} cards.`;
+        showCreateSet = false;
+      } else {
+        error = data.message || 'A set with this name already exists. Use a different set name.';
       }
-      const created = await res.json();
-      sets = [...sets, created];
-      showCreateSet = false;
-      success = 'Set created.';
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to create set';
     } finally {
@@ -205,6 +297,52 @@
     issueError = '';
   }
 
+  function openDrawModal() {
+    showDrawModal = true;
+    drawTargetSub = '';
+    drawCount = 5;
+    drawError = '';
+    drawResult = null;
+    issueUsers = [];
+    issueUsersLoading = true;
+    fetchAdmin('/api/admin/users')
+      .then((r) => r.ok ? r.json() : { users: [] })
+      .then((data) => { issueUsers = data.users || []; })
+      .catch(() => { issueUsers = []; })
+      .finally(() => { issueUsersLoading = false; });
+  }
+
+  function closeDrawModal() {
+    showDrawModal = false;
+    drawResult = null;
+  }
+
+  async function submitDraw() {
+    if (!selectedSet || !drawTargetSub.trim()) return;
+    drawSubmitting = true;
+    drawError = '';
+    drawResult = null;
+    success = '';
+    try {
+      const res = await fetchAdmin(`/api/admin/sets/${selectedSet.id}/draw`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          discord_sub: drawTargetSub.trim(),
+          count: Math.max(1, Math.min(20, drawCount || 1)),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || 'Draw failed');
+      drawResult = { drawn: data.drawn || [], issuances: data.issuances || [] };
+      success = `Drew ${data.drawn?.length ?? 0} card(s) and issued to user.`;
+    } catch (e) {
+      drawError = e instanceof Error ? e.message : 'Draw failed';
+    } finally {
+      drawSubmitting = false;
+    }
+  }
+
   async function submitIssue() {
     if (!issueCard || !issueTargetSub.trim()) return;
     issueSubmitting = true;
@@ -264,6 +402,9 @@
       {#if view === 'sets'}
         <Button size="sm" class="h-9 text-sm" onclick={openCreateSet}>New set</Button>
       {:else if selectedSet}
+        <Button size="sm" class="h-9 text-sm" onclick={openDrawModal} disabled={cards.length === 0} title="Draw cards with rarity-weighted RNG and issue to a user">
+          Draw for user
+        </Button>
         <a href="/admin/manage-cards/{selectedSet.id}/new">
           <Button size="sm" class="h-9 text-sm">Add card</Button>
         </a>
@@ -417,6 +558,69 @@
     </div>
   {/if}
 
+  <!-- Modal: Draw for user -->
+  {#if showDrawModal && selectedSet}
+    <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="draw-title" tabindex="-1">
+      <div
+        class="absolute inset-0 bg-black/60"
+        role="button"
+        tabindex="0"
+        aria-label="Close modal"
+        onclick={(e) => { if ((e.target as HTMLElement).closest?.('[data-modal-content]')) return; closeDrawModal(); }}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeDrawModal(); } }}></div>
+      <div class="relative w-full max-w-md bg-card border border-border rounded-t-2xl sm:rounded-2xl shadow-xl p-6 max-h-[90vh] overflow-y-auto" data-modal-content>
+        <h2 id="draw-title" class="text-lg font-semibold mb-1">Draw cards for user</h2>
+        <p class="text-muted-foreground text-sm mb-4">Draw from "{selectedSet.name}" using rarity-weighted RNG and issue to a user. Common → Legendary odds: 70% / 20% / 7% / 2% / 1%.</p>
+        {#if drawError}
+          <p class="text-red-400 text-sm mb-3">{drawError}</p>
+        {/if}
+        <div class="space-y-4">
+          <div>
+            <label for="draw-user" class="block text-sm font-medium mb-1">User</label>
+            {#if issueUsersLoading}
+              <p class="text-muted-foreground text-sm">Loading users…</p>
+            {:else}
+              <select
+                id="draw-user"
+                bind:value={drawTargetSub}
+                class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                disabled={issueUsers.length === 0}
+              >
+                <option value="">Select user</option>
+                {#each issueUsers as u}
+                  <option value={u.discord_sub}>{u.discord_username || u.discord_sub} ({u.wallet_id?.slice(0, 12) ?? '—'}…)</option>
+                {/each}
+              </select>
+              {#if issueUsers.length === 0 && !issueUsersLoading}
+                <p class="text-muted-foreground text-xs mt-0.5">No users with wallet yet. User must log in once.</p>
+              {/if}
+            {/if}
+          </div>
+          <div>
+            <label for="draw-count" class="block text-sm font-medium mb-1">Number of cards (1–20)</label>
+            <input id="draw-count" type="number" min="1" max="20" bind:value={drawCount} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+          </div>
+          {#if drawResult?.drawn?.length}
+            <div class="rounded-lg border border-border bg-muted/50 p-3 text-sm">
+              <p class="font-medium mb-2">Drawn and issued:</p>
+              <ul class="space-y-1">
+                {#each drawResult.drawn as card}
+                  <li><span class="capitalize">{card.rarity}</span> — {card.name}</li>
+                {/each}
+              </ul>
+            </div>
+          {/if}
+          <div class="flex gap-2 pt-2">
+            <Button onclick={submitDraw} disabled={drawSubmitting || !drawTargetSub.trim() || issueUsersLoading}>
+              {drawSubmitting ? 'Drawing…' : 'Draw & issue'}
+            </Button>
+            <Button variant="outline" onclick={closeDrawModal}>Close</Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Modal: Create set -->
   {#if showCreateSet}
     <div class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="create-set-title" tabindex="-1">
@@ -427,36 +631,126 @@
         aria-label="Close modal"
         onclick={(e) => { if ((e.target as HTMLElement).closest?.('[data-modal-content]')) return; closeCreateSet(); }}
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); closeCreateSet(); } }}></div>
-      <div class="relative w-full max-w-md bg-card border border-border rounded-t-2xl sm:rounded-2xl shadow-xl p-6 max-h-[90vh] overflow-y-auto" data-modal-content>
-        <h2 id="create-set-title" class="text-lg font-semibold mb-1">Create set</h2>
-        <p class="text-muted-foreground text-sm mb-4">Slug is derived from the name.</p>
-        <div class="space-y-4">
-          <div>
-            <label for="set-name" class="block text-sm font-medium mb-1">Name</label>
-            <input id="set-name" type="text" bind:value={newSetName} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="e.g. Genesis" />
-          </div>
-          <div>
-            <label for="set-type" class="block text-sm font-medium mb-1">Set type</label>
-            <input id="set-type" type="text" bind:value={newSetType} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="e.g. Trading Card, Collectible" />
-          </div>
-          <div>
-            <label for="set-desc" class="block text-sm font-medium mb-1">Description (optional)</label>
-            <textarea id="set-desc" bind:value={newSetDescription} rows="2" class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Optional"></textarea>
-          </div>
-          <div>
-            <label for="set-back" class="block text-sm font-medium mb-1">Card back image (optional)</label>
-            <input
-              id="set-back"
-              type="file"
-              accept=".png,.svg,.jpg,.jpeg,.webp,image/png,image/svg+xml,image/jpeg,image/webp"
-              class="w-full text-sm file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground"
-              onchange={(e) => { newSetBackFile = (e.target as HTMLInputElement).files?.[0] ?? null; }}
-            />
-            <p class="text-muted-foreground text-xs mt-0.5">PNG, SVG, JPG, or WebP. Used as the back of cards in this set.</p>
-          </div>
-          <div class="flex gap-2 pt-2">
-            <Button onclick={createSet} disabled={creatingSet || !newSetName.trim()}>
-              {creatingSet ? 'Creating…' : 'Create'}
+      <div class="relative w-full max-w-2xl bg-card border border-border rounded-t-2xl sm:rounded-2xl shadow-xl p-8 max-h-[90vh] overflow-y-auto" data-modal-content>
+        <div class="mb-6">
+          <h2 id="create-set-title" class="text-xl font-semibold tracking-tight">Create set</h2>
+          <p class="text-muted-foreground text-sm mt-1">Upload card details (CSV) and images (ZIP). Add a name, type, and optional card back.</p>
+        </div>
+
+        <div class="space-y-6">
+          <section class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="set-name" class="block text-sm font-medium mb-1.5">Set name</label>
+              <input id="set-name" type="text" bind:value={newSetName} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="e.g. OG Set" />
+            </div>
+            <div>
+              <label for="set-type" class="block text-sm font-medium mb-1.5">Type</label>
+              <select id="set-type" bind:value={newSetType} class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                <option value="collection">Collection</option>
+                <option value="promo">Promo</option>
+              </select>
+            </div>
+          </section>
+
+          <section>
+            <h3 class="text-sm font-medium text-muted-foreground mb-3">Uploads — drag files or click to choose</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label for="set-back" class="block text-sm font-medium mb-1.5">Card back (PNG)</label>
+                <input
+                  bind:this={newSetBackInputEl}
+                  id="set-back"
+                  type="file"
+                  accept=".png,.svg,.jpg,.jpeg,.webp,image/png,image/svg+xml,image/jpeg,image/webp"
+                  class="sr-only"
+                  onchange={(e) => { onSetBackChosen((e.target as HTMLInputElement).files?.[0] ?? null); }}
+                />
+                <button
+                  type="button"
+                  class="w-full rounded-xl border-2 border-dashed px-3 py-5 text-center text-sm transition-colors min-h-[100px] flex flex-col items-center justify-center gap-1 {newSetBackDragging
+                    ? 'border-primary bg-primary/10'
+                    : newSetBackFile
+                      ? 'border-border bg-muted/30'
+                      : 'border-muted-foreground/30 hover:border-muted-foreground/50 hover:bg-muted/20'}"
+                  ondragover={setBackDragOver}
+                  ondragleave={() => (newSetBackDragging = false)}
+                  ondrop={setBackDrop}
+                  onclick={triggerSetBackInput}
+                >
+                  {#if newSetBackFile}
+                    <span class="text-muted-foreground text-xs truncate max-w-full px-1">{newSetBackFile.name}</span>
+                  {:else}
+                    <span class="text-muted-foreground text-xs">Image</span>
+                    <span class="text-muted-foreground/80 text-xs">PNG, JPG, WebP</span>
+                  {/if}
+                </button>
+              </div>
+              <div>
+                <label for="set-csv" class="block text-sm font-medium mb-1.5">Card details (CSV)</label>
+                <input
+                  bind:this={newSetCsvInputEl}
+                  id="set-csv"
+                  type="file"
+                  accept=".csv,text/csv"
+                  class="sr-only"
+                  onchange={(e) => { onSetCsvChosen((e.target as HTMLInputElement).files?.[0] ?? null); }}
+                />
+                <button
+                  type="button"
+                  class="w-full rounded-xl border-2 border-dashed px-3 py-5 text-center text-sm transition-colors min-h-[100px] flex flex-col items-center justify-center gap-1 {newSetCsvDragging
+                    ? 'border-primary bg-primary/10'
+                    : newSetCsvFile
+                      ? 'border-border bg-muted/30'
+                      : 'border-muted-foreground/30 hover:border-muted-foreground/50 hover:bg-muted/20'}"
+                  ondragover={setCsvDragOver}
+                  ondragleave={() => (newSetCsvDragging = false)}
+                  ondrop={setCsvDrop}
+                  onclick={triggerSetCsvInput}
+                >
+                  {#if newSetCsvFile}
+                    <span class="text-muted-foreground text-xs truncate max-w-full px-1">{newSetCsvFile.name}</span>
+                  {:else}
+                    <span class="text-muted-foreground text-xs">details.csv</span>
+                    <span class="text-muted-foreground/80 text-xs">Click or drop</span>
+                  {/if}
+                </button>
+              </div>
+              <div>
+                <label for="set-zip" class="block text-sm font-medium mb-1.5">Card images (ZIP)</label>
+                <input
+                  bind:this={newSetZipInputEl}
+                  id="set-zip"
+                  type="file"
+                  accept=".zip,application/zip"
+                  class="sr-only"
+                  onchange={(e) => { onSetZipChosen((e.target as HTMLInputElement).files?.[0] ?? null); }}
+                />
+                <button
+                  type="button"
+                  class="w-full rounded-xl border-2 border-dashed px-3 py-5 text-center text-sm transition-colors min-h-[100px] flex flex-col items-center justify-center gap-1 {newSetZipDragging
+                    ? 'border-primary bg-primary/10'
+                    : newSetZipFile
+                      ? 'border-border bg-muted/30'
+                      : 'border-muted-foreground/30 hover:border-muted-foreground/50 hover:bg-muted/20'}"
+                  ondragover={setZipDragOver}
+                  ondragleave={() => (newSetZipDragging = false)}
+                  ondrop={setZipDrop}
+                  onclick={triggerSetZipInput}
+                >
+                  {#if newSetZipFile}
+                    <span class="text-muted-foreground text-xs truncate max-w-full px-1">{newSetZipFile.name}</span>
+                  {:else}
+                    <span class="text-muted-foreground text-xs">cards.zip</span>
+                    <span class="text-muted-foreground/80 text-xs">Click or drop</span>
+                  {/if}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <div class="flex gap-3 pt-2">
+            <Button onclick={createSet} disabled={creatingSet || !newSetName.trim() || !newSetCsvFile || !newSetZipFile}>
+              {creatingSet ? 'Creating…' : 'Create set'}
             </Button>
             <Button variant="outline" onclick={closeCreateSet}>Cancel</Button>
           </div>

@@ -7,7 +7,7 @@
 # Two containers (frontend = nginx):  docker compose up -d postgres backend frontend
 #   Frontend on 80, backend on 8000. Two domains or reverse-proxy for single domain.
 #
-#   docker compose up -d ocr   # optional: for /analyze-card-image OCR
+# OCR for card image analysis is disabled by default. To enable, run the ocr-service and set OCR_SERVICE_URL in backend/.env.
 #
 # Backend needs DISCORD_*, SECRET_KEY, BACKEND_URL, FRONTEND_URL in backend/.env.
 
@@ -39,7 +39,6 @@ services:
       - ./backend/.env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/tritone_cards
-      OCR_SERVICE_URL: http://ocr:8001
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,7 +56,6 @@ services:
       ACAPY_ADMIN_URL: http://agent:8020
       BACKEND_URL: http://localhost:8000
       FRONTEND_URL: http://localhost:5173
-      OCR_SERVICE_URL: http://ocr:8001
     depends_on:
       postgres:
         condition: service_healthy

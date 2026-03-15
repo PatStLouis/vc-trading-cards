@@ -16,6 +16,9 @@ frontend/build/
 frontend/.svelte-kit/
 frontend/dev-dist/
 
+# Root sets directory only (leading slash = repo root)
+/sets/
+
 # IDE / OS
 .idea/
 .vscode/

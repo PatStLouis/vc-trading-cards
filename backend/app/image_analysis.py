@@ -1,7 +1,10 @@
 """Analyze card images: metadata (format, dimensions, EXIF/ICC) and optional OCR via microservice."""
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 try:
     from PIL import Image
@@ -10,10 +13,10 @@ except ImportError:
     HAS_PIL = False
 
 
-def analyze_image(data: bytes, content_type: str | None = None, run_ocr: bool = True) -> dict[str, Any]:
+def analyze_image(data: bytes, content_type: str | None = None, run_ocr: bool = False) -> dict[str, Any]:
     """
-    Analyze image bytes. Returns format, dimensions, EXIF/ICC flags,
-    and optional suggested card fields from OCR (when OCR_SERVICE_URL is set and run_ocr=True).
+    Analyze image bytes. Returns format, dimensions, EXIF/ICC flags.
+    Optional: when OCR_SERVICE_URL is set and run_ocr=True, also returns suggested card fields from OCR.
     """
     result: dict[str, Any] = {
         "format": None,
@@ -58,7 +61,10 @@ def _run_ocr(data: bytes, content_type: str | None, result: dict[str, Any]) -> N
     settings = get_settings()
     url = (settings.ocr_service_url or "").strip()
     if not url:
+        # OCR disabled: no service URL configured. Skip silently (no ocr_error).
         return
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
     base = url.rstrip("/")
     ocr_url = f"{base}/ocr"
     try:
@@ -74,11 +80,16 @@ def _run_ocr(data: bytes, content_type: str | None, result: dict[str, Any]) -> N
                 headers=headers,
             )
         if r.status_code != 200:
+            result["ocr_error"] = f"OCR service returned {r.status_code}: {r.text[:200]}"
+            logger.warning("OCR request failed: %s %s", r.status_code, r.text[:200])
             return
         data_resp = r.json()
         if data_resp.get("raw_text"):
             result["raw_text"] = data_resp["raw_text"]
         if data_resp.get("suggested"):
             result["suggested"] = data_resp["suggested"]
-    except Exception:
-        pass
+    except Exception as e:
+        from urllib.parse import urlparse
+        host = urlparse(ocr_url).netloc or ocr_url
+        result["ocr_error"] = f"{e} (host: {host})"
+        logger.exception("OCR request failed")

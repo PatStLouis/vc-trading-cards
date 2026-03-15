@@ -173,6 +173,16 @@ async def init_db():
                 WHERE l.card_id = a.card_id AND l.to_user_id = a.user_id AND l.event_type = 'card.issued'
             )
         """)
+        # Backfill user_collection from admin_issued_cards so public Explore is ledger-based
+        await conn.execute("""
+            INSERT INTO user_collection (user_id, card_id, credential_id, synced_at)
+            SELECT a.user_id, a.card_id, '', NOW()
+            FROM admin_issued_cards a
+            WHERE NOT EXISTS (
+                SELECT 1 FROM user_collection uc
+                WHERE uc.user_id = a.user_id AND uc.card_id = a.card_id
+            )
+        """)
 
 
 async def close_db():
@@ -730,22 +740,25 @@ async def create_card(
     types: list[str] | None = None,
     subtypes: str = "trading-cards",
     supertype: str = "trading-card",
+    name: str = "",
 ) -> dict | None:
-    """Create card. card_id is a unique identifier (e.g. UUID or hash); name is set to card_id for backwards compat."""
+    """Create card. card_id is a unique identifier (e.g. UUID or hash). name defaults to card_id if omitted."""
     pool = _get_pool()
     types_arr = types or ["TradingCard"]
     cid = (card_id or "").strip()
     if not cid:
         return None
+    display_name = (name or "").strip() or cid
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
             INSERT INTO cards (set_id, card_id, name, number, rarity, set_name, quote, artwork, image_path, photograph, artist, band, types, subtypes, supertype, updated_at)
-            VALUES ($1, $2, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
             RETURNING id, set_id, name, number, rarity, set_name, quote, artwork, image_path, photograph, artist, band, types, subtypes, supertype, created_at, updated_at, card_id
             """,
             set_id,
             cid,
+            display_name,
             number.strip(),
             (rarity or "common").strip(),
             set_name.strip(),
@@ -758,6 +771,23 @@ async def create_card(
             types_arr,
             (subtypes or "trading-cards").strip(),
             (supertype or "trading-card").strip(),
+        )
+    if not row:
+        return None
+    return _row_to_card(row)
+
+
+async def get_card_by_card_id(set_id: str, card_id: str) -> dict | None:
+    """Get a card by set_id and logical card_id (e.g. 001_OGSET_NICKARTHUR)."""
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT id, set_id, name, number, rarity, set_name, quote, artwork, image_path, photograph, artist, band, types, subtypes, supertype, created_at, updated_at, card_id
+            FROM cards WHERE set_id = $1 AND card_id = $2
+            """,
+            set_id,
+            card_id,
         )
     if not row:
         return None
@@ -1033,6 +1063,16 @@ async def apply_card_issued_event(card_id: str, to_user_id: str, actor_user_id: 
             card_id,
             to_user_id.strip(),
         )
+        if row:
+            await conn.execute(
+                """
+                INSERT INTO user_collection (user_id, card_id, credential_id, synced_at)
+                VALUES ($1::uuid, $2::uuid, '', NOW())
+                ON CONFLICT (user_id, card_id) DO UPDATE SET synced_at = NOW()
+                """,
+                to_user_id.strip(),
+                card_id,
+            )
     if not row:
         return None
     return {

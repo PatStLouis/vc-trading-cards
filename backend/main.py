@@ -83,6 +83,12 @@ if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
     _index_path = os.path.join(_frontend_build_dir, "index.html")
     _app_dir = os.path.join(_frontend_build_dir, "_app")
     if os.path.isfile(_index_path) and os.path.isdir(_app_dir):
+        _no_cache_headers = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
+
+        @app.get("/")
+        async def _serve_index():
+            return FileResponse(_index_path, media_type="text/html", headers=_no_cache_headers)
+
         app.mount("/_app", StaticFiles(directory=_app_dir, html=False), name="frontend_app")
         app.mount("/", StaticFiles(directory=_frontend_build_dir, html=True), name="frontend")
         _serving_spa = True
@@ -94,7 +100,7 @@ if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
             path = request.url.path
             if path.startswith(("/api", "/auth", "/uploads", "/_app", "/.well-known", "/docs", "/openapi.json", "/redoc")):
                 return JSONResponse(status_code=404, content={"detail": "Not Found"})
-            return FileResponse(_index_path, media_type="text/html")
+            return FileResponse(_index_path, media_type="text/html", headers=_no_cache_headers)
     else:
         logging.getLogger("uvicorn.error").warning(
             "FRONTEND_BUILD_DIR=%r missing index.html or _app/; not serving SPA", _frontend_build_dir,

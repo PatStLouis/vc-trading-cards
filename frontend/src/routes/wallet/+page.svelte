@@ -16,8 +16,6 @@
   let sets: SetInfo[] = $state([]);
   let loading = $state(true);
   let error = $state('');
-  let syncing = $state(false);
-  let syncMessage = $state('');
 
   let dismissAdminNotice = $state(false);
 
@@ -112,25 +110,6 @@
     goto('/');
   }
 
-  async function syncCollection() {
-    if (!user || syncing) return;
-    syncing = true;
-    syncMessage = '';
-    try {
-      const res = await fetchApi('/api/wallet/cards/sync', { method: 'POST', auth: true });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        syncMessage = data.message || 'Collection synced. You now appear in Explore.';
-      } else {
-        syncMessage = data.detail || 'Sync failed.';
-      }
-    } catch {
-      syncMessage = 'Sync failed.';
-    } finally {
-      syncing = false;
-    }
-  }
-
   // Group cards by set for row layout; preserve order of first appearance
   const cardsBySet = $derived.by(() => {
     const groups = new Map<string, Array<Record<string, unknown>>>();
@@ -197,12 +176,6 @@
             <span class="wallet-header__stat-dot" aria-hidden="true"></span>
             {cards.length} {cards.length === 1 ? 'card' : 'cards'}
           </div>
-          <Button variant="outline" size="sm" class="rounded-full" onclick={syncCollection} disabled={syncing || cards.length === 0}>
-            {syncing ? 'Syncing…' : 'Sync to Explore'}
-          </Button>
-          {#if syncMessage}
-            <span class="text-xs text-muted-foreground">{syncMessage}</span>
-          {/if}
         </div>
       {/if}
     </header>

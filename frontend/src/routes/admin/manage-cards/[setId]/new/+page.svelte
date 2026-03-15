@@ -112,6 +112,7 @@
       lastAnalysis = data;
       if (Object.keys(s).length > 0) analysisMessage = 'Suggestions applied from image.';
       else if (data.width && data.height) analysisMessage = `Image: ${data.format} ${data.width}×${data.height}.`;
+      if (data.ocr_error) analysisMessage = (analysisMessage ? analysisMessage + ' ' : '') + `OCR: ${data.ocr_error}`;
     } catch {
       analysisMessage = 'Could not analyze image.';
     } finally {

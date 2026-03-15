@@ -52,6 +52,8 @@ from app.db import (
     list_ledger,
 )
 from app.image_analysis import analyze_image
+from app.provision_set import provision_set_pack, provision_set_from_uploads
+from app.draw import draw_cards
 from config import get_settings
 
 settings = get_settings()
@@ -211,6 +213,115 @@ async def delete_set(set_id: str, _admin: dict = Depends(get_current_admin)):
     return {"deleted": True}
 
 
+PROVISION_SET_RESPONSE = {
+    "set": RESPONSE_SET,
+    "cards_created": 0,
+    "cards_skipped": 0,
+    "errors": [],
+    "created": True,
+    "message": "optional message when set already existed",
+}
+
+
+@router.post(
+    "/provision-set",
+    responses={200: response_example(PROVISION_SET_RESPONSE)},
+    tags=["Admin · Sets"],
+)
+async def provision_set_route(
+    _admin: dict = Depends(get_current_admin),
+    path: str = Body(..., embed=True),
+    set_name: str | None = Body(None, embed=True),
+    slug: str | None = Body(None, embed=True),
+    skip_existing: bool = Body(True, embed=True),
+):
+    """
+    Provision a set pack from disk into the app. The set pack directory must contain
+    details.csv (CARD NUMBER, CARD NAME, RARITY, QUOTE, FILE NAME) and cards.zip (card images).
+    path: directory path relative to server cwd or absolute (e.g. sets/OG_SET or ../sets/OG_SET).
+    """
+    if not (path or "").strip():
+        raise HTTPException(status_code=400, detail="path is required")
+    try:
+        result = await provision_set_pack(
+            pack_path=path.strip(),
+            upload_dir=os.path.abspath(settings.upload_dir),
+            set_name_override=set_name,
+            slug_override=slug,
+            skip_existing=skip_existing,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+
+@router.post(
+    "/provision-set-upload",
+    responses={200: response_example(PROVISION_SET_RESPONSE)},
+    tags=["Admin · Sets"],
+)
+async def provision_set_upload_route(
+    _admin: dict = Depends(get_current_admin),
+    csv_file: UploadFile = File(..., description="details.csv with columns: CARD NUMBER, CARD NAME, RARITY, QUOTE, FILE NAME"),
+    zip_file: UploadFile = File(..., description="cards.zip with card images named {FILE NAME}.png"),
+    set_name: str = Form("Imported Set"),
+    slug: str = Form(""),
+    set_type: str = Form(""),
+    card_back: UploadFile | None = File(None),
+    skip_existing: bool = Form(True),
+):
+    """
+    Provision a set by uploading details.csv and cards.zip. Optional: set type (collection/promo), card back image.
+    CSV must have columns: CARD NUMBER, CARD NAME, RARITY, QUOTE, FILE NAME.
+    """
+    if not csv_file.filename or not csv_file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Upload a CSV file (details.csv)")
+    if not zip_file.filename or not zip_file.filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Upload a ZIP file (cards.zip)")
+    try:
+        csv_bytes = await csv_file.read()
+        zip_bytes = await zip_file.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read uploads: {e}")
+    if len(csv_bytes) == 0:
+        raise HTTPException(status_code=400, detail="CSV file is empty")
+    if len(zip_bytes) == 0:
+        raise HTTPException(status_code=400, detail="ZIP file is empty")
+
+    result = await provision_set_from_uploads(
+        csv_bytes=csv_bytes,
+        zip_bytes=zip_bytes,
+        upload_dir=os.path.abspath(settings.upload_dir),
+        set_name_override=set_name.strip() or "Imported Set",
+        slug_override=slug.strip() or None,
+        set_type=set_type.strip(),
+        skip_existing=skip_existing,
+    )
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    if result.get("set") and card_back and card_back.filename:
+        try:
+            rel = _save_set_back_image(result["set"]["id"], card_back)
+            contents = await card_back.read()
+            base = os.path.abspath(settings.upload_dir)
+            full = os.path.join(base, rel)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "wb") as f:
+                f.write(contents)
+            updated = await update_card_set(result["set"]["id"], card_back_path=rel)
+            if updated:
+                result["set"] = updated
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to save card back image: {e}")
+
+    return result
+
+
 # ---- Cards ----
 
 ANALYZE_IMAGE_RESPONSE = {
@@ -238,12 +349,11 @@ ANALYZE_IMAGE_RESPONSE = {
 async def analyze_card_image(
     _admin: dict = Depends(get_current_admin),
     image: UploadFile = File(...),
-    ocr: bool = True,
+    ocr: bool = False,
 ):
     """
-    Analyze an image file: format, dimensions, EXIF/ICC, and optional OCR suggestions
-    (name, quote, photographer, card number). Use before or when adding a card to pre-fill form.
-    Set ocr=false for metadata-only (faster, no suggested fields).
+    Analyze an image file: format, dimensions, EXIF/ICC. Optional OCR (name, quote, etc.) when
+    ocr=true and OCR_SERVICE_URL is set. OCR is disabled by default.
     """
     if not image.filename:
         raise HTTPException(status_code=400, detail="No file provided")
@@ -288,11 +398,70 @@ async def list_cards_in_set(set_id: str, _admin: dict = Depends(get_current_admi
     return {"cards": cards}
 
 
+DRAW_RESPONSE = {
+    "drawn": [RESPONSE_CARD],
+    "issuances": [{"id": "uuid", "card_id": "uuid", "user_id": "uuid", "issued_at": "iso8601"}],
+}
+
+
+@router.post(
+    "/sets/{set_id}/draw",
+    responses={200: response_example(DRAW_RESPONSE)},
+    tags=["Admin · Cards"],
+)
+async def draw_and_issue(
+    set_id: str,
+    _admin: dict = Depends(get_current_admin),
+    body: dict = Body(...),
+):
+    """
+    Draw cards from the set using rarity-weighted RNG and issue them to a user.
+    Body: discord_sub or user_id (required), count (default 1, max 20).
+    Weights: common > uncommon > rare > ultra-rare > legendary by default.
+    """
+    s = await get_card_set(set_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="Set not found")
+    user_id = (body.get("user_id") or "").strip()
+    discord_sub = (body.get("discord_sub") or "").strip()
+    if not user_id and discord_sub:
+        user_id = await get_user_by_provider("discord", discord_sub)
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id or discord_sub is required")
+    tenant = await get_tenant_by_user_id(user_id)
+    if not tenant:
+        raise HTTPException(
+            status_code=400,
+            detail="User not found or has no wallet. They must log in at least once before you can receive drawn cards.",
+        )
+    count = body.get("count", 1)
+    try:
+        count = max(1, min(20, int(count)))
+    except (TypeError, ValueError):
+        count = 1
+
+    cards = await list_cards(set_id)
+    if not cards:
+        raise HTTPException(status_code=400, detail="Set has no cards to draw from")
+
+    drawn = await asyncio.to_thread(draw_cards, cards, count)
+
+    actor_id = None if _admin.get("user_id") == "__admin_api_key__" else _admin.get("user_id")
+    issuances = []
+    for card in drawn:
+        issued = await apply_card_issued_event(card["id"], user_id, actor_id)
+        if issued:
+            issuances.append(issued)
+
+    return {"drawn": drawn, "issuances": issuances}
+
+
 @router.post("/sets/{set_id}/cards", responses={200: response_example(RESPONSE_CARD)}, tags=["Admin · Cards"])
 async def create_card_route(
     set_id: str,
     _admin: dict = Depends(get_current_admin),
     card_id: str = Form(...),
+    name: str = Form(""),
     number: str = Form(""),
     rarity: str = Form("common"),
     set_name: str = Form(""),
@@ -306,7 +475,7 @@ async def create_card_route(
     subtypes: str = Form("trading-cards"),
     supertype: str = Form("trading-card"),
 ):
-    """Create card in set. card_id is a unique id (e.g. UUID or hash). Optional: PNG or JPEG image."""
+    """Create card in set. card_id is a unique id (e.g. UUID or hash). name is display name; optional PNG/JPEG image."""
     s = await get_card_set(set_id)
     if not s:
         raise HTTPException(status_code=404, detail="Set not found")
@@ -315,6 +484,7 @@ async def create_card_route(
         card = await create_card(
             set_id=set_id,
             card_id=card_id.strip(),
+            name=name.strip(),
             number=number,
             rarity=rarity,
             set_name=set_name or s["name"],
@@ -348,6 +518,7 @@ async def create_card_route(
     card = await create_card(
         set_id=set_id,
         card_id=card_id.strip(),
+        name=name.strip(),
         number=number,
         rarity=rarity,
         set_name=set_name or s["name"],

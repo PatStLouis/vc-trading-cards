@@ -13,7 +13,6 @@ from app.schemas import (
 )
 from app.services.acapy import list_credentials
 from app.db import (
-    get_card_id_by_set_and_name,
     sync_user_collection,
     list_admin_issued_for_user,
     webauthn_list_credentials_for_user,
@@ -268,30 +267,9 @@ async def wallet_cards(
 
 
 @router.post("/wallet/cards/sync", responses={200: response_example(RESPONSE_SYNC)})
-async def sync_wallet_cards(
-    _user: dict = Depends(get_current_user),
-    tenant_token: str | None = Depends(get_tenant_token_for_request),
-):
-    """Sync the current user's cards to the public collection (so they appear in search / who-has-which-card)."""
-    raw = await list_credentials(tenant_token)
-    pairs = []
-    seen_card_ids = set()
-    for rec in raw:
-        cred = rec.get("credential") if isinstance(rec.get("credential"), dict) else rec
-        subject = (cred or rec).get("credentialSubject", {}) if isinstance(cred or rec, dict) else {}
-        if not isinstance(subject, dict):
-            continue
-        set_name = (subject.get("set") or "").strip()
-        card_name = (subject.get("name") or "Unknown").strip()
-        cred_id = rec.get("credential_id") or (cred or {}).get("id") or ""
-        card_id = await get_card_id_by_set_and_name(set_name, card_name)
-        if card_id and card_id not in seen_card_ids:
-            pairs.append((card_id, cred_id))
-            seen_card_ids.add(card_id)
-    # Include admin-issued cards so they appear in Explore even when user has no ACA-Py credentials
-    for card_id in await get_admin_issued_card_ids(_user["user_id"]):
-        if card_id not in seen_card_ids:
-            pairs.append((card_id, ""))
-            seen_card_ids.add(card_id)
+async def sync_wallet_cards(_user: dict = Depends(get_current_user)):
+    """Rebuild the current user's public collection from the ledger (issued cards). Collection is also updated automatically when cards are issued."""
+    card_ids = await get_admin_issued_card_ids(_user["user_id"])
+    pairs = [(card_id, "") for card_id in card_ids]
     await sync_user_collection(_user["user_id"], pairs)
-    return {"synced": len(pairs), "message": "Collection synced. You will appear in search and card owners."}
+    return {"synced": len(pairs), "message": "Collection refreshed from ledger. You appear in Explore."}

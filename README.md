@@ -104,9 +104,15 @@ Commands: **/wallet** — link to open your deck (and card count if logged in); 
 
 Admins log in with the same Discord OAuth as everyone else. Set `ADMIN_DISCORD_IDS` to your Discord user ID(s), e.g. `ADMIN_DISCORD_IDS=123456789,987654321`. After login, admins see an **Admin** button on the wallet page and can open **/admin** to view total users and a table of registered users (Discord username, ID, wallet ID, created date). Non-admins get 403 on `/api/admin/*` and are redirected from `/admin` to `/wallet`.
 
-### OCR (card image analysis)
+### OCR (card image analysis) — optional, disabled by default
 
-When adding a card in **Admin → Cards → New card**, uploading an image triggers analysis: format, dimensions, EXIF/ICC, and **OCR** to suggest name, quote, photographer, and card number from the image text. OCR uses **EasyOCR** (Python-only; no system binary like Tesseract required). The first OCR run may download language models (~100MB). No env vars are required.
+When adding a card in **Admin → Cards → New card**, the **Analyze** button runs image metadata only (format, dimensions, EXIF/ICC) by default. **OCR** (to suggest name, quote, photographer, card number from image text) is disabled unless you:
+
+1. Run the OCR microservice (e.g. `docker compose up -d ocr` or run `ocr-service` locally).
+2. Set `OCR_SERVICE_URL` in backend `.env` (e.g. `http://localhost:8001`).
+3. Call the analyze endpoint with `ocr=true` (e.g. `POST /api/admin/analyze-card-image?ocr=true`).
+
+The OCR service uses EasyOCR (Python; first run may download language models). The default stack does not include or require it.
 
 ## Project layout
 
