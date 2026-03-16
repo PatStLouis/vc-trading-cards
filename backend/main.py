@@ -103,6 +103,15 @@ _app_origins = [
         "http://127.0.0.1:5175",
     ] if o
 ]
+# Allow /_app/* (SPA assets) to be loaded from opaque origin (e.g. sandboxed iframe with allow-scripts but no same-origin)
+@app.middleware("http")
+async def _cors_app_assets(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/_app/"):
+        response.headers.setdefault("Access-Control-Allow-Origin", "*")
+    return response
+
+
 # Innermost first: preflight handler for localhost (so OPTIONS always gets CORS headers), then fallback for other responses
 app.add_middleware(PreflightCORSForLocalhostMiddleware)
 app.add_middleware(EnsureCORSForLocalhostMiddleware)
