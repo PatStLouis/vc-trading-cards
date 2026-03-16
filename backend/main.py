@@ -17,7 +17,12 @@ from app.admin import router as admin_router, discord_router as admin_discord_ro
 from app.wallet import router as wallet_router
 from app.public import router as public_router
 from app.services import discord_bot_router
-from app.security import SecurityHeadersMiddleware, RateLimitMiddleware
+from app.security import (
+    SecurityHeadersMiddleware,
+    RateLimitMiddleware,
+    EnsureCORSForLocalhostMiddleware,
+    PreflightCORSForLocalhostMiddleware,
+)
 
 settings = get_settings()
 
@@ -26,12 +31,24 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     await init_db()
     os.makedirs(settings.upload_dir, exist_ok=True)
+    # Pull missing card images from DB to disk (non-fatal: log and continue if pull fails)
+    try:
+        from app.image_sync import pull_images_from_db
+        result = await pull_images_from_db(settings.upload_dir, force=False)
+        if result["pulled"] > 0 or result["errors"]:
+            logging.getLogger("uvicorn.error").info(
+                "Startup: pulled %s images from DB, skipped %s%s",
+                result["pulled"],
+                result["skipped"],
+                f", {len(result['errors'])} errors" if result["errors"] else "",
+            )
+    except Exception as e:
+        logging.getLogger("uvicorn.error").warning("Startup: DB image pull skipped: %s", e)
     if (
         (settings.secret_key or "").strip() in ("", "change-me-in-production")
         and settings.backend_url.strip().lower().startswith("https")
         and "localhost" not in settings.backend_url.lower()
     ):
-        import logging
         logging.getLogger("uvicorn.error").warning(
             "SECRET_KEY is default or empty and BACKEND_URL is HTTPS. Set SECRET_KEY in production."
         )
@@ -48,20 +65,49 @@ app = FastAPI(
 )
 
 
+def _cors_headers_for_request(request: Request) -> dict:
+    """Add CORS headers for localhost origin so error responses allow the frontend to read the body."""
+    origin = request.headers.get("origin", "").strip()
+    if not origin:
+        return {}
+    if origin.startswith("http://localhost") or origin.startswith("http://127.0.0.1"):
+        return {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+        }
+    return {}
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Return JSON with a friendly message for any unhandled exception (avoids raw 'Internal Server Error' HTML)."""
     logger = logging.getLogger("uvicorn.error")
     logger.exception("Unhandled exception: %s", exc)
+    headers = dict(_cors_headers_for_request(request))
     return JSONResponse(
         status_code=500,
         content={"detail": "Something went wrong. Please try again."},
+        headers=headers,
     )
 
 
+# CORS: frontend URL + localhost ports. Fallback middleware ensures localhost gets the header even when main CORS does not run (e.g. error path).
+_app_origins = [
+    o for o in [
+        settings.frontend_url.rstrip("/"),
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5175",
+        "http://127.0.0.1:5175",
+    ] if o
+]
+# Innermost first: preflight handler for localhost (so OPTIONS always gets CORS headers), then fallback for other responses
+app.add_middleware(PreflightCORSForLocalhostMiddleware)
+app.add_middleware(EnsureCORSForLocalhostMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url.rstrip("/"), "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5175", "http://127.0.0.1:5175"],
+    allow_origins=_app_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -50,9 +50,9 @@ export default defineConfig(({ mode }) => {
           '**/twitch-base.png',
           '**/logos/brutality-logo2.png'
         ],
-        navigateFallback: '/',
+        // Disable navigate fallback: plugin defaults to navigateFallback: 'index.html', which uses createHandlerBoundToURL and throws non-precached-url since we don't precache index.html.
+        navigateFallback: null,
         navigateFallbackDenylist: [/^\/api/, /^\/auth/, /^\/uploads/],
-        // New SW activates immediately and removes old caches so next load gets fresh HTML
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true

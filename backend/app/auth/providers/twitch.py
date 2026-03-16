@@ -7,11 +7,11 @@ _settings = get_settings()
 
 
 def get_authorize_url(state: str, redirect_uri: str) -> str:
+    """Minimal scope: no email, no openid. Helix /users still returns id, login, display_name with the token."""
     params = {
         "client_id": _settings.twitch_client_id,
         "redirect_uri": redirect_uri,
         "response_type": "code",
-        "scope": "openid user:read:email",
         "state": state,
     }
     return f"https://id.twitch.tv/oauth2/authorize?{urlencode(params)}"

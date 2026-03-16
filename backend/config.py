@@ -57,7 +57,9 @@ class Settings(BaseSettings):
     frontend_build_dir: str = os.getenv("FRONTEND_BUILD_DIR", "")
 
     # Optional: OCR microservice URL for card image analysis (e.g. http://ocr:8001). If set, OCR via HTTP.
-    ocr_service_url: str = os.getenv("OCR_SERVICE_URL", "")
+
+    # Optional: default source URL for admin "Sync images" (e.g. http://localhost:8000). Can be overridden per request.
+    sync_source_url: str = os.getenv("SYNC_SOURCE_URL", "")
 
     # WebAuthn (passkeys)
     webauthn_rp_id: str = os.getenv("WEBAUTHN_RP_ID", "")  # e.g. localhost or app.example.com

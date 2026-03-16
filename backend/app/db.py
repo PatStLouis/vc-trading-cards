@@ -112,6 +112,13 @@ async def init_db():
         await conn.execute("ALTER TABLE cards ADD COLUMN IF NOT EXISTS band TEXT")
         await conn.execute("ALTER TABLE cards ADD COLUMN IF NOT EXISTS card_id TEXT UNIQUE")
         await conn.execute("""
+            CREATE TABLE IF NOT EXISTS card_image_data (
+                card_id UUID PRIMARY KEY REFERENCES cards(id) ON DELETE CASCADE,
+                content_type TEXT NOT NULL DEFAULT 'image/png',
+                data BYTEA NOT NULL
+            )
+        """)
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS user_collection (
                 user_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
                 card_id UUID NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
@@ -706,6 +713,85 @@ async def list_cards(set_id: str) -> list[dict]:
     return [_row_to_card(r) for r in rows]
 
 
+async def list_cards_with_image_paths() -> list[dict]:
+    """Return all cards that have a non-empty image_path (for sync/cache)."""
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, set_id, name, image_path
+            FROM cards
+            WHERE image_path IS NOT NULL AND TRIM(image_path) != ''
+            ORDER BY set_id, number, name
+            """
+        )
+    return [
+        {
+            "id": str(r["id"]),
+            "set_id": str(r["set_id"]),
+            "name": r["name"] or "",
+            "image_path": (r["image_path"] or "").strip(),
+        }
+        for r in rows
+    ]
+
+
+async def set_card_image_data(card_id: str, data: bytes, content_type: str = "image/png") -> bool:
+    """Upsert image bytes for a card. Used by Push to DB."""
+    if not data:
+        return False
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO card_image_data (card_id, content_type, data)
+            VALUES ($1::uuid, $2, $3)
+            ON CONFLICT (card_id) DO UPDATE SET content_type = $2, data = $3
+            """,
+            card_id,
+            content_type or "image/png",
+            data,
+        )
+    return True
+
+
+async def get_card_image_data(card_id: str) -> tuple[bytes | None, str | None]:
+    """Return (data, content_type) for a card's stored image, or (None, None)."""
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT data, content_type FROM card_image_data WHERE card_id = $1::uuid",
+            card_id,
+        )
+    if not row:
+        return None, None
+    return bytes(row["data"]), (row["content_type"] or "image/png")
+
+
+async def list_card_ids_with_image_data() -> list[str]:
+    """Return card IDs that have blob data in card_image_data (for Pull from DB)."""
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT card_id FROM card_image_data")
+    return [str(r["card_id"]) for r in rows]
+
+
+async def list_cards_with_image_data_and_path() -> list[dict]:
+    """Return cards that have both image blob in card_image_data and image_path set (for Pull from DB)."""
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT c.id, c.image_path
+            FROM cards c
+            INNER JOIN card_image_data d ON d.card_id = c.id
+            WHERE c.image_path IS NOT NULL AND TRIM(c.image_path) != ''
+            ORDER BY c.set_id, c.number
+            """
+        )
+    return [{"id": str(r["id"]), "image_path": (r["image_path"] or "").strip()} for r in rows]
+
+
 def _row_to_card(row) -> dict:
     """Build card dict from a DB row (supports optional photograph, artist, band, card_back_path from set join)."""
     out = {
@@ -1147,20 +1233,29 @@ async def list_ledger(
                    c.name AS card_name, c.number AS card_number, c.set_name AS card_set_name,
                    to_ua.provider_username AS to_username,
                    from_ua.provider_username AS from_username,
-                   actor_ua.provider_username AS actor_username
+                   COALESCE(actor_d.provider_username, actor_t.provider_username) AS actor_username
             FROM card_ledger l
             JOIN cards c ON c.id = l.card_id
             LEFT JOIN user_accounts to_ua ON to_ua.user_id = l.to_user_id AND to_ua.provider = 'discord'
             LEFT JOIN user_accounts from_ua ON from_ua.user_id = l.from_user_id AND from_ua.provider = 'discord'
-            LEFT JOIN user_accounts actor_ua ON actor_ua.user_id = l.actor_user_id AND actor_ua.provider = 'discord'
+            LEFT JOIN user_accounts actor_d ON actor_d.user_id = l.actor_user_id AND actor_d.provider = 'discord'
+            LEFT JOIN user_accounts actor_t ON actor_t.user_id = l.actor_user_id AND actor_t.provider = 'twitch'
             {where}
             ORDER BY l.created_at DESC
             LIMIT ${i}
             """,
             *values,
         )
-    return [
-        {
+    out = []
+    for r in rows:
+        actor_uid = str(r["actor_user_id"]) if r.get("actor_user_id") else None
+        actor_name = (r["actor_username"] or actor_uid) if actor_uid else "API key"
+        from_uid = str(r["from_user_id"]) if r.get("from_user_id") else None
+        from_name = r["from_username"] if from_uid else None
+        # For issuances, show issuer in From column (who issued the card)
+        if r["event_type"] == EVENT_CARD_ISSUED:
+            from_name = actor_name
+        out.append({
             "id": str(r["id"]),
             "event_type": r["event_type"],
             "card_id": str(r["card_id"]),
@@ -1169,15 +1264,14 @@ async def list_ledger(
             "card_set_name": r["card_set_name"] or "",
             "to_user_id": str(r["to_user_id"]),
             "to_username": r["to_username"] or str(r["to_user_id"]),
-            "from_user_id": str(r["from_user_id"]) if r.get("from_user_id") else None,
-            "from_username": r["from_username"] if r.get("from_user_id") else None,
-            "actor_user_id": str(r["actor_user_id"]) if r.get("actor_user_id") else None,
-            "actor_username": (r["actor_username"] or str(r["actor_user_id"])) if r.get("actor_user_id") else "API key",
+            "from_user_id": from_uid,
+            "from_username": from_name,
+            "actor_user_id": actor_uid,
+            "actor_username": actor_name,
             "created_at": _format_date(r["created_at"]),
             "payload": r.get("metadata"),
-        }
-        for r in rows
-    ]
+        })
+    return out
 
 
 # ---- Public catalog & user collection ----

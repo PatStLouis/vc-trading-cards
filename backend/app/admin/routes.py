@@ -1,6 +1,8 @@
 """Admin dashboard API: stats, user list, card sets and cards. Requires user to be in ADMIN_DISCORD_IDS."""
 import asyncio
 import os
+from urllib.parse import urlparse
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, Form, Body
 from app.dependencies import get_current_admin
 from app.schemas import (
@@ -42,6 +44,10 @@ from app.db import (
     update_card_set,
     delete_card_set,
     list_cards,
+    list_cards_with_image_paths,
+    list_cards_with_image_data_and_path,
+    set_card_image_data,
+    get_card_image_data,
     create_card,
     get_card,
     update_card,
@@ -52,6 +58,7 @@ from app.db import (
     list_ledger,
 )
 from app.image_analysis import analyze_image
+from app.image_sync import pull_images_from_db as do_pull_images_from_db
 from app.provision_set import provision_set_pack, provision_set_from_uploads
 from app.draw import draw_cards
 from config import get_settings
@@ -97,6 +104,151 @@ async def stats(_admin: dict = Depends(get_current_admin)):
     total_sets = await count_card_sets()
     total_cards = await count_cards_total()
     return {"total_users": total_users, "total_sets": total_sets, "total_cards": total_cards}
+
+
+SYNC_IMAGES_RESPONSE = {
+    "synced": 12,
+    "skipped": 3,
+    "errors": [{"card_id": "uuid", "image_path": "cards/set/card.png", "error": "404"}],
+}
+
+
+@router.post(
+    "/sync-images",
+    responses={200: response_example(SYNC_IMAGES_RESPONSE)},
+    tags=["Admin · Sets"],
+)
+async def sync_images(
+    _admin: dict = Depends(get_current_admin),
+    source_url: str = Body("", embed=True, description="Base URL of the instance to pull images from (e.g. http://localhost:8000). Overrides SYNC_SOURCE_URL if set."),
+    force: bool = Body(False, embed=True, description="Re-download even if file already exists locally."),
+):
+    """
+    Pull card images from another instance (e.g. your local backend) into this instance's upload dir.
+    Use when DB is shared but uploads live only on the source. Lists cards with image_path from DB,
+    fetches each from source/uploads/{image_path}, and saves locally. Skips existing files unless force=true.
+    """
+    base_url = (source_url or getattr(settings, "sync_source_url", "") or "").strip().rstrip("/")
+    if not base_url:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide source_url in the request body or set SYNC_SOURCE_URL (e.g. http://localhost:8000)."
+        )
+    parsed = urlparse(base_url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="source_url must be http or https.")
+    upload_base = os.path.abspath(settings.upload_dir)
+    cards = await list_cards_with_image_paths()
+    synced = 0
+    skipped = 0
+    errors: list[dict] = []
+    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+        for card in cards:
+            image_path = card["image_path"]
+            if not image_path or ".." in image_path or image_path.startswith("/"):
+                errors.append({"card_id": card["id"], "image_path": image_path, "error": "Invalid image_path"})
+                continue
+            local_path = os.path.join(upload_base, image_path)
+            if not os.path.normpath(local_path).startswith(upload_base):
+                errors.append({"card_id": card["id"], "image_path": image_path, "error": "Path escapes upload dir"})
+                continue
+            if not force and os.path.isfile(local_path):
+                skipped += 1
+                continue
+            url = f"{base_url}/uploads/{image_path}"
+            try:
+                resp = await client.get(url)
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                errors.append({"card_id": card["id"], "image_path": image_path, "error": f"HTTP {e.response.status_code}"})
+                continue
+            except Exception as e:
+                errors.append({"card_id": card["id"], "image_path": image_path, "error": str(e)})
+                continue
+            try:
+                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                with open(local_path, "wb") as f:
+                    f.write(resp.content)
+                synced += 1
+            except OSError as e:
+                errors.append({"card_id": card["id"], "image_path": image_path, "error": str(e)})
+    return {"synced": synced, "skipped": skipped, "errors": errors}
+
+
+PUSH_PULL_RESPONSE = {
+    "pushed": 10,
+    "skipped": 2,
+    "errors": [{"card_id": "uuid", "image_path": "cards/set/card.png", "error": "File not found"}],
+}
+
+
+@router.post(
+    "/push-images-to-db",
+    responses={200: response_example(PUSH_PULL_RESPONSE)},
+    tags=["Admin · Sets"],
+)
+async def push_images_to_db(
+    _admin: dict = Depends(get_current_admin),
+    force: bool = Body(False, embed=True, description="Overwrite existing blob in DB even if already set."),
+):
+    """
+    Push local card images into the database. Reads each card's image file from disk (image_path)
+    and stores it in card_image_data. Use on the instance that has the files (e.g. local);
+    then Pull from DB on the other instance (e.g. remote) to write files from DB to disk.
+    """
+    upload_base = os.path.abspath(settings.upload_dir)
+    cards = await list_cards_with_image_paths()
+    pushed = 0
+    skipped = 0
+    errors: list[dict] = []
+    for card in cards:
+        image_path = card["image_path"]
+        if not image_path or ".." in image_path or image_path.startswith("/"):
+            errors.append({"card_id": card["id"], "image_path": image_path, "error": "Invalid image_path"})
+            continue
+        local_path = os.path.join(upload_base, image_path)
+        if not os.path.normpath(local_path).startswith(upload_base):
+            errors.append({"card_id": card["id"], "image_path": image_path, "error": "Path escapes upload dir"})
+            continue
+        if not os.path.isfile(local_path):
+            errors.append({"card_id": card["id"], "image_path": image_path, "error": "File not found"})
+            continue
+        if not force:
+            existing, _ = await get_card_image_data(card["id"])
+            if existing:
+                skipped += 1
+                continue
+        try:
+            with open(local_path, "rb") as f:
+                data = f.read()
+            content_type = "image/png"
+            if image_path.lower().endswith(".jpg") or image_path.lower().endswith(".jpeg"):
+                content_type = "image/jpeg"
+            await set_card_image_data(card["id"], data, content_type)
+            pushed += 1
+        except OSError as e:
+            errors.append({"card_id": card["id"], "image_path": image_path, "error": str(e)})
+        except Exception as e:
+            errors.append({"card_id": card["id"], "image_path": image_path, "error": str(e)})
+    return {"pushed": pushed, "skipped": skipped, "errors": errors}
+
+
+@router.post(
+    "/pull-images-from-db",
+    responses={200: response_example({"pulled": 10, "skipped": 2, "errors": []})},
+    tags=["Admin · Sets"],
+)
+async def pull_images_from_db(
+    _admin: dict = Depends(get_current_admin),
+    force: bool = Body(False, embed=True, description="Overwrite existing local files."),
+):
+    """
+    Pull card images from the database to local disk. Reads each card's image from card_image_data
+    and writes to upload_dir/image_path. Use on the instance that shares the DB but has no files
+    (e.g. remote after local has run Push to DB).
+    """
+    result = await do_pull_images_from_db(settings.upload_dir, force=force)
+    return {"pulled": result["pulled"], "skipped": result["skipped"], "errors": result["errors"]}
 
 
 @router.get("/users", responses={200: response_example(RESPONSE_USERS)}, tags=["Admin · Users"])

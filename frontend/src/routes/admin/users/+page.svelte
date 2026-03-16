@@ -61,8 +61,46 @@
     <div class="py-12 text-center text-neutral-500 text-sm">Loading…</div>
   {:else if error}
     <div class="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-400 text-sm">{error}</div>
+  {:else if filtered.length === 0}
+    <div class="rounded-xl border border-neutral-700 bg-neutral-800/80 py-12 text-center text-neutral-500 text-sm">
+      {search.trim() ? 'No users match your search.' : 'No users yet.'}
+    </div>
   {:else}
-    <div class="rounded-xl border border-neutral-700 bg-neutral-800/80 overflow-hidden">
+    <!-- Mobile: card list -->
+    <ul class="sm:hidden space-y-3">
+      {#each filtered as u}
+        <li class="rounded-xl border border-neutral-700 bg-neutral-800/80 p-4">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <p class="font-medium text-neutral-100 truncate">{u.discord_username || '—'}</p>
+              <p class="text-xs font-mono text-neutral-500 mt-0.5 truncate" title={u.discord_sub}>{u.discord_sub}</p>
+              <p class="text-xs font-mono text-neutral-500 mt-1 truncate" title={u.wallet_id}>{u.wallet_id}</p>
+              {#if u.created_at}
+                <p class="text-xs text-neutral-500 mt-2">{new Date(u.created_at).toLocaleDateString(undefined, { dateStyle: 'short' })}</p>
+              {/if}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              class="h-9 w-9 shrink-0 p-0 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700"
+              title="Copy wallet ID"
+              onclick={() => copyWalletId(u.wallet_id)}>
+              {#if copiedId === u.wallet_id}
+                <span class="text-xs text-emerald-400">Copied</span>
+              {:else}
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+                  <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                </svg>
+              {/if}
+            </Button>
+          </div>
+        </li>
+      {/each}
+    </ul>
+
+    <!-- Desktop: table -->
+    <div class="hidden sm:block rounded-xl border border-neutral-700 bg-neutral-800/80 overflow-hidden">
       <div class="overflow-x-auto">
         <Table.Root>
           <Table.Header>
@@ -107,11 +145,6 @@
           </Table.Body>
         </Table.Root>
       </div>
-      {#if filtered.length === 0}
-        <div class="py-12 text-center text-neutral-500 text-sm">
-          {search.trim() ? 'No users match your search.' : 'No users yet.'}
-        </div>
-      {/if}
     </div>
   {/if}
 </div>

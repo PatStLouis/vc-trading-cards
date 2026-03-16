@@ -1,4 +1,5 @@
 """Security: headers middleware, optional rate limiting."""
+import re
 import time
 from collections import defaultdict
 from fastapi import Request, Response
@@ -6,12 +7,52 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 from config import get_settings
 
+# Match localhost with optional port for CORS fallback (optional trailing slash)
+_LOCALHOST_ORIGIN_RE = re.compile(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?/?$", re.IGNORECASE)
+
+
+class PreflightCORSForLocalhostMiddleware(BaseHTTPMiddleware):
+    """Handle OPTIONS preflight for localhost origins so the response always has valid CORS headers (avoids 'Missing Header' on preflight)."""
+
+    async def dispatch(self, request: Request, call_next):
+        if request.method != "OPTIONS":
+            return await call_next(request)
+        origin = (request.headers.get("origin") or "").strip()
+        if not origin or not _LOCALHOST_ORIGIN_RE.fullmatch(origin):
+            return await call_next(request)
+        # Preflight for localhost: return 200 with full CORS headers so browser allows the actual request
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Admin-API-Key",
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Max-Age": "600",
+                "Vary": "Origin",
+            },
+        )
+
+
+class EnsureCORSForLocalhostMiddleware(BaseHTTPMiddleware):
+    """Fallback: set Access-Control-Allow-Origin for localhost origins if missing (avoids CORS errors when main CORS does not run)."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        origin = request.headers.get("origin")
+        origin_normalized = (origin or "").strip().rstrip("/") or None
+        if origin_normalized and _LOCALHOST_ORIGIN_RE.fullmatch(origin_normalized) and "access-control-allow-origin" not in response.headers:
+            response.headers["Access-Control-Allow-Origin"] = origin  # use original Origin value
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers.setdefault("Vary", "Origin")
+        return response
+
 
 # ---- Security headers ----
 
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
-    "X-Frame-Options": "DENY",
+    "X-Frame-Options": "SAMEORIGIN",  # Allow same-origin framing (e.g. profile preview iframe on /wallet/profile)
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "X-XSS-Protection": "1; mode=block",
     "Permissions-Policy": "accelerometer=(), camera=(), geolocation=(), microphone=(), payment=(), usb=()",
