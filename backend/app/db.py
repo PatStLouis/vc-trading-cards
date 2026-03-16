@@ -1,4 +1,5 @@
 """Async PostgreSQL store: users, user_accounts (multi-provider auth), user_tenant (wallet), cards, collection."""
+import os
 import re
 import uuid
 import asyncpg
@@ -24,6 +25,17 @@ def _format_date(dt):
         dt = dt.replace(tzinfo=timezone.utc)
     utc = dt.astimezone(timezone.utc)
     return utc.replace(microsecond=0).strftime("%Y-%m-%d %H:%M:%SZ")
+
+
+def _card_back_path_if_exists(rel_path: str | None) -> str:
+    """Return rel_path only if the file exists under upload_dir; else ''. Avoids 404s for missing set backs."""
+    if not (rel_path or "").strip():
+        return ""
+    base = os.path.abspath(_settings.upload_dir)
+    full = os.path.normpath(os.path.join(base, rel_path))
+    if not full.startswith(base):
+        return ""
+    return rel_path if os.path.isfile(full) else ""
 
 
 async def init_db():
@@ -602,12 +614,22 @@ async def list_card_sets() -> list[dict]:
             "slug": r["slug"] or "",
             "description": r["description"] or "",
             "set_type": r.get("set_type") or "",
-            "card_back_path": r.get("card_back_path") or "",
+            "card_back_path": _card_back_path_if_exists(r.get("card_back_path")),
             "created_at": _format_date(r["created_at"]),
             "updated_at": _format_date(r["updated_at"]),
         }
         for r in rows
     ]
+
+
+async def list_card_set_back_paths() -> list[dict]:
+    """Return sets that have a card_back_path set (raw from DB, for sync). Use when pulling from URL to know what to fetch."""
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT id, card_back_path FROM card_sets WHERE card_back_path IS NOT NULL AND TRIM(card_back_path) != ''"
+        )
+    return [{"id": str(r["id"]), "card_back_path": (r["card_back_path"] or "").strip()} for r in rows]
 
 
 def _slug_from_name(name: str) -> str:
@@ -665,7 +687,7 @@ async def get_card_set(set_id: str) -> dict | None:
         "slug": row["slug"],
         "description": row["description"] or "",
         "set_type": row.get("set_type") or "",
-        "card_back_path": row.get("card_back_path") or "",
+        "card_back_path": _card_back_path_if_exists(row.get("card_back_path")),
         "created_at": _format_date(row["created_at"]),
         "updated_at": _format_date(row["updated_at"]),
     }
@@ -837,7 +859,7 @@ def _row_to_card(row) -> dict:
         "card_id": row.get("card_id") or str(row["id"]),
     }
     if row.get("card_back_path") is not None:
-        out["card_back_path"] = row.get("card_back_path") or ""
+        out["card_back_path"] = _card_back_path_if_exists(row.get("card_back_path"))
     return out
 
 

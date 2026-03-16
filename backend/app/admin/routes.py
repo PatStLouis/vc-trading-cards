@@ -39,6 +39,7 @@ from app.db import (
     count_card_sets,
     count_cards_total,
     list_card_sets,
+    list_card_set_back_paths,
     create_card_set,
     get_card_set,
     update_card_set,
@@ -172,6 +173,37 @@ async def sync_images(
                 synced += 1
             except OSError as e:
                 errors.append({"card_id": card["id"], "image_path": image_path, "error": str(e)})
+        # Set card backs: pull from source for each set that has card_back_path in DB
+        set_backs = await list_card_set_back_paths()
+        for s in set_backs:
+            image_path = s["card_back_path"]
+            if not image_path or ".." in image_path or image_path.startswith("/"):
+                errors.append({"set_id": s["id"], "image_path": image_path, "error": "Invalid card_back_path"})
+                continue
+            local_path = os.path.join(upload_base, image_path)
+            if not os.path.normpath(local_path).startswith(upload_base):
+                errors.append({"set_id": s["id"], "image_path": image_path, "error": "Path escapes upload dir"})
+                continue
+            if not force and os.path.isfile(local_path):
+                skipped += 1
+                continue
+            url = f"{base_url}/uploads/{image_path}"
+            try:
+                resp = await client.get(url)
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                errors.append({"set_id": s["id"], "image_path": image_path, "error": f"HTTP {e.response.status_code}"})
+                continue
+            except Exception as e:
+                errors.append({"set_id": s["id"], "image_path": image_path, "error": str(e)})
+                continue
+            try:
+                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                with open(local_path, "wb") as f:
+                    f.write(resp.content)
+                synced += 1
+            except OSError as e:
+                errors.append({"set_id": s["id"], "image_path": image_path, "error": str(e)})
     return {"synced": synced, "skipped": skipped, "errors": errors}
 
 

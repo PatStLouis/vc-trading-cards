@@ -191,7 +191,7 @@
       aria-label="Expand card: {name}"
       tabindex="0"
     >
-      <img class="card__back" src={back} alt="Card back" loading="lazy" width="660" height="921" />
+      <img class="card__back" src={back} alt="Card back" loading="lazy" width="660" height="921" onerror={(e) => { const t = e.currentTarget; if (t && t.src !== '/card-back.svg') t.src = '/card-back.svg'; }} />
       <div class="card__front">
         {#if img}
           <img src={img} alt="{name}" loading="lazy" width="660" height="921" />

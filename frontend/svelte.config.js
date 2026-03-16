@@ -9,6 +9,11 @@ const config = {
       fallback: 'index.html',
       prerender: { entries: [] }
     }),
+    // Force absolute asset URLs (/_app/...) so scripts load correctly when the page is served at a path like /wallet/profile
+    paths: {
+      base: '',
+      assets: '/'
+    },
     csrf: { trustedOrigins: ['http://localhost:5173', 'http://127.0.0.1:5173'] }
   }
 };

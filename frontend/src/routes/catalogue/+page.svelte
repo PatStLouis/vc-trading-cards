@@ -108,7 +108,7 @@
       me = null;
     }
     // Pre-open a user's deck when linked from profile (e.g. /catalogue?user=userId)
-    const userId = page.url.searchParams.get('user');
+    const userId = $page?.url?.searchParams?.get('user') ?? null;
     if (userId) {
       try {
         const profileRes = await fetchApi(`/api/public/users/${encodeURIComponent(userId)}`, { auth: false });

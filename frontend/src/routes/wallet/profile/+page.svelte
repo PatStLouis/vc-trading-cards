@@ -267,7 +267,7 @@
   <title>Profile · Brutality Cards</title>
 </svelte:head>
 
-<div class="app-page py-8 px-4 md:py-10 relative">
+<div class="app-page profile-page-mobile py-4 px-3 sm:py-8 sm:px-4 md:py-10 relative">
   <div class="app-page__bg" aria-hidden="true"></div>
   <div class="texture-overlay" aria-hidden="true"></div>
 
@@ -279,22 +279,22 @@
     {:else if error}
       <div class="rounded-xl border border-destructive/50 bg-card/50 p-4">
         <p class="text-sm text-destructive">{error}</p>
-        <Button variant="outline" size="sm" class="mt-2" onclick={load}>Retry</Button>
+        <Button variant="outline" size="sm" class="mt-2 min-h-[44px] sm:min-h-0" onclick={load}>Retry</Button>
       </div>
     {:else if profile}
-      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 mb-4">
         <p class="text-xs text-muted-foreground">This is what others see when they look up your profile.</p>
-        <Button variant="destructive" size="sm" class="font-bold ml-auto" onclick={() => (showPreview = true)}>Preview public profile</Button>
+        <Button variant="destructive" size="sm" class="font-bold w-full sm:w-auto sm:ml-auto min-h-[44px]" onclick={() => (showPreview = true)}>Preview public profile</Button>
       </div>
 
       <section class="rounded-xl border border-border/80 bg-card/50 overflow-hidden">
-        <div class="p-4 space-y-4">
-          <div class="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs">
+        <div class="p-3 sm:p-4 space-y-4">
+          <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs">
             <span class="text-muted-foreground">Display name</span>
             <span class="font-medium text-foreground">{profile.username || '—'}</span>
             <span class="text-muted-foreground" aria-hidden="true">·</span>
             <span class="text-muted-foreground">Poser</span>
-            <span class="font-mono text-foreground">{profile.poser_username || '—'}</span>
+            <span class="font-mono text-foreground truncate max-w-[120px] sm:max-w-none">{profile.poser_username || '—'}</span>
             <span class="text-muted-foreground" aria-hidden="true">·</span>
             <span class="text-muted-foreground">Collection</span>
             <span class="font-medium text-foreground">{profile.collection_count} {profile.collection_count === 1 ? 'card' : 'cards'}</span>
@@ -302,9 +302,9 @@
 
           <!-- MySpace/SpaceHey-style profile customizations -->
           <div class="border-t border-border/60 pt-4">
-            <p class="text-[10px] uppercase tracking-wide text-muted-foreground mb-3">Customize your profile</p>
+            <p class="text-xs uppercase tracking-wide text-muted-foreground mb-2">Customize your profile</p>
             <p class="text-xs text-muted-foreground mb-3">Headline, bio, and profile song appear on your public profile. Make it yours.</p>
-            <div class="space-y-3">
+            <div class="space-y-4">
               <div>
                 <label for="profile-headline" class="text-xs text-muted-foreground">Headline</label>
                 <input
@@ -313,7 +313,7 @@
                   bind:value={profileHeadline}
                   maxlength="200"
                   placeholder="e.g. Collector · Metalhead · Card enthusiast"
-                  class="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  class="mt-1 w-full rounded-md border border-input bg-background px-3 py-3 sm:py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring min-h-[44px]"
                 />
               </div>
               <div>
@@ -324,26 +324,26 @@
                   maxlength="5000"
                   rows="4"
                   placeholder="Tell the world a bit about yourself..."
-                  class="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-y"
+                  class="mt-1 w-full rounded-md border border-input bg-background px-3 py-3 sm:py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-y min-h-[100px]"
                 />
               </div>
               <div>
                 <p class="text-xs text-muted-foreground mb-2">Profile song</p>
-                <div class="flex flex-wrap gap-3 mb-2">
-                  <label class="flex items-center gap-1.5 cursor-pointer">
-                    <input type="radio" name="song-source" value="youtube" bind:group={profileSongSource} />
+                <div class="flex flex-wrap gap-2 mb-2">
+                  <label class="profile-song-option flex items-center gap-2 cursor-pointer rounded-lg border border-border px-3 py-2.5 min-h-[44px] hover:bg-accent/30 has-[:checked]:border-primary has-[:checked]:bg-primary/10">
+                    <input type="radio" name="song-source" value="youtube" bind:group={profileSongSource} class="sr-only" />
                     <span class="text-sm">YouTube</span>
                   </label>
-                  <label class="flex items-center gap-1.5 cursor-pointer">
-                    <input type="radio" name="song-source" value="direct" bind:group={profileSongSource} />
+                  <label class="profile-song-option flex items-center gap-2 cursor-pointer rounded-lg border border-border px-3 py-2.5 min-h-[44px] hover:bg-accent/30 has-[:checked]:border-primary has-[:checked]:bg-primary/10">
+                    <input type="radio" name="song-source" value="direct" bind:group={profileSongSource} class="sr-only" />
                     <span class="text-sm">Direct link</span>
                   </label>
-                  <label class="flex items-center gap-1.5 cursor-pointer">
-                    <input type="radio" name="song-source" value="upload" bind:group={profileSongSource} />
-                    <span class="text-sm">Upload file</span>
+                  <label class="profile-song-option flex items-center gap-2 cursor-pointer rounded-lg border border-border px-3 py-2.5 min-h-[44px] hover:bg-accent/30 has-[:checked]:border-primary has-[:checked]:bg-primary/10">
+                    <input type="radio" name="song-source" value="upload" bind:group={profileSongSource} class="sr-only" />
+                    <span class="text-sm">Upload</span>
                   </label>
-                  <label class="flex items-center gap-1.5 cursor-pointer">
-                    <input type="radio" name="song-source" value="spotify" bind:group={profileSongSource} />
+                  <label class="profile-song-option flex items-center gap-2 cursor-pointer rounded-lg border border-border px-3 py-2.5 min-h-[44px] hover:bg-accent/30 has-[:checked]:border-primary has-[:checked]:bg-primary/10">
+                    <input type="radio" name="song-source" value="spotify" bind:group={profileSongSource} class="sr-only" />
                     <span class="text-sm">Spotify</span>
                   </label>
                 </div>
@@ -353,40 +353,43 @@
                     type="url"
                     bind:value={profileSongUrl}
                     placeholder="https://youtube.com/watch?v=... or youtu.be/..."
-                    class="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    class="mt-1 w-full rounded-md border border-input bg-background px-3 py-3 sm:py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring min-h-[44px]"
                   />
-                  <p class="mt-1 text-[10px] text-muted-foreground">YouTube link. Music category only when validated.</p>
+                  <p class="mt-1 text-xs text-muted-foreground">YouTube link. Music category only when validated.</p>
                 {:else if profileSongSource === 'direct'}
                   <input
                     id="profile-song-direct"
                     type="url"
                     bind:value={profileSongUrl}
                     placeholder="https://example.com/track.mp3"
-                    class="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    class="mt-1 w-full rounded-md border border-input bg-background px-3 py-3 sm:py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring min-h-[44px]"
                   />
-                  <p class="mt-1 text-[10px] text-muted-foreground">Direct URL to an audio file (MP3, OGG, etc.).</p>
+                  <p class="mt-1 text-xs text-muted-foreground">Direct URL to an audio file (MP3, OGG, etc.).</p>
                 {:else if profileSongSource === 'spotify'}
                   <input
                     id="profile-song-spotify"
                     type="url"
                     bind:value={profileSongUrl}
                     placeholder="https://open.spotify.com/track/... or user/playlist/album"
-                    class="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    class="mt-1 w-full rounded-md border border-input bg-background px-3 py-3 sm:py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring min-h-[44px]"
                   />
-                  <p class="mt-1 text-[10px] text-muted-foreground">Spotify track, playlist, album or profile link.</p>
+                  <p class="mt-1 text-xs text-muted-foreground">Spotify track, playlist, album or profile link.</p>
                 {:else}
                   <div class="mt-1 space-y-2">
                     {#if profileSongUploadUrl}
-                      <p class="text-sm text-muted-foreground">Uploaded. <button type="button" class="text-primary hover:underline" onclick={removeProfileSong}>Remove</button></p>
+                      <p class="text-sm text-muted-foreground">Uploaded. <button type="button" class="text-primary hover:underline min-h-[44px] min-w-[44px] inline-flex items-center" onclick={removeProfileSong}>Remove</button></p>
                     {:else}
-                      <input
-                        id="profile-song-file"
-                        type="file"
-                        accept="audio/mpeg,audio/mp3,audio/ogg,audio/webm,audio/mp4"
-                        class="text-sm"
-                        onchange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) uploadProfileSong(f); (e.target as HTMLInputElement).value = ''; }}
-                      />
-                      <p class="text-[10px] text-muted-foreground">MP3, OGG, WebM or M4A. Max 5MB.</p>
+                      <label for="profile-song-file" class="mt-1 flex min-h-[44px] cursor-pointer items-center justify-center rounded-md border border-input bg-background px-3 py-3 text-sm text-foreground hover:bg-accent/30">
+                        <input
+                          id="profile-song-file"
+                          type="file"
+                          accept="audio/mpeg,audio/mp3,audio/ogg,audio/webm,audio/mp4"
+                          class="sr-only"
+                          onchange={(e) => { const f = (e.target as HTMLInputElement).files?.[0]; if (f) uploadProfileSong(f); (e.target as HTMLInputElement).value = ''; }}
+                        />
+                        <span>Choose audio file…</span>
+                      </label>
+                      <p class="mt-1 text-xs text-muted-foreground">MP3, OGG, WebM or M4A. Max 5MB.</p>
                     {/if}
                   </div>
                 {/if}
@@ -400,7 +403,7 @@
                     bind:value={profileAccentColor}
                     maxlength="20"
                     placeholder="#c41e3a or leave blank"
-                    class="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    class="flex-1 min-w-0 rounded-md border border-input bg-background px-3 py-3 sm:py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring min-h-[44px]"
                   />
                   {#if profileAccentColor}
                     {@const hex = profileAccentColor.startsWith('#') && /^#[0-9A-Fa-f]{3,6}$/.test(profileAccentColor)}
@@ -412,7 +415,7 @@
                   {/if}
                 </div>
               </div>
-              <Button variant="outline" size="sm" onclick={saveProfileCustomization} disabled={savingProfile || uploadingSong}>
+              <Button variant="outline" size="sm" class="w-full sm:w-auto min-h-[44px]" onclick={saveProfileCustomization} disabled={savingProfile || uploadingSong}>
                 {savingProfile ? 'Saving…' : uploadingSong ? 'Uploading…' : 'Save profile'}
               </Button>
             </div>
@@ -420,41 +423,41 @@
 
           <!-- Featured cards: select up to 3 to display on public profile -->
           <div>
-            <p class="text-[10px] uppercase tracking-wide text-muted-foreground mb-2">Cards on your profile</p>
+            <p class="text-xs uppercase tracking-wide text-muted-foreground mb-2">Cards on your profile</p>
             <p class="text-xs text-muted-foreground mb-3">Choose up to 3 cards to show on your public profile. These are visible to everyone.</p>
             {#if collection.length === 0}
               <p class="text-xs text-muted-foreground">Sync your deck first — you need at least one card to feature.</p>
             {:else}
-              <div class="flex flex-nowrap gap-2 mb-3 overflow-x-auto">
+              <div class="flex flex-nowrap gap-2 mb-3 overflow-x-auto pb-1 -mx-1 px-1 profile-featured-scroll">
                 {#each featuredIds as id}
                   {@const card = collection.find((c) => c.id === id)}
-                  <div class="flex items-center gap-2 rounded-lg border border-border bg-background/80 p-2 shrink-0">
+                  <div class="flex items-center gap-2 rounded-lg border border-border bg-background/80 p-2 shrink-0 min-w-0">
                     {#if card}
                       {#if cardImageUrl(card)}
-                        <img src={cardImageUrl(card)} alt="" class="h-10 w-auto rounded object-cover" />
+                        <img src={cardImageUrl(card)} alt="" class="h-10 w-10 rounded object-cover shrink-0" />
                       {:else}
-                        <span class="h-10 w-10 rounded bg-muted flex items-center justify-center text-xs">?</span>
+                        <span class="h-10 w-10 rounded bg-muted flex items-center justify-center text-xs shrink-0">?</span>
                       {/if}
-                    <span class="text-xs font-medium max-w-[100px] truncate">{card?.name ?? id}</span>
-                    <button
-                      type="button"
-                      class="rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                      aria-label="Remove from profile"
-                      onclick={() => toggleFeatured(id)}
-                    >
-                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                  {/if}
+                      <span class="text-xs font-medium max-w-[80px] sm:max-w-[100px] truncate">{card?.name ?? id}</span>
+                      <button
+                        type="button"
+                        class="rounded p-2 -m-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10 min-w-[44px] min-h-[44px] flex items-center justify-center sm:min-w-0 sm:min-h-0 sm:p-1"
+                        aria-label="Remove from profile"
+                        onclick={() => toggleFeatured(id)}
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    {/if}
                   </div>
                 {/each}
               </div>
               {#if featuredIds.length < 3}
-                <p class="text-xs text-muted-foreground mb-2">Click a card below to add it to your profile ({featuredIds.length}/3).</p>
-                <div class="card-picker-scroll grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
+                <p class="text-xs text-muted-foreground mb-2">Tap a card below to add it to your profile ({featuredIds.length}/3).</p>
+                <div class="card-picker-scroll grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-52 sm:max-h-48 overflow-y-auto">
                   {#each collection.filter((c) => !featuredIds.includes(c.id)) as card (card.id)}
                     <button
                       type="button"
-                      class="flex flex-col items-center rounded-lg border border-border bg-background/50 p-2 hover:border-primary/50 hover:bg-accent/30 transition-colors text-left"
+                      class="flex flex-col items-center rounded-lg border border-border bg-background/50 p-2 min-h-[100px] hover:border-primary/50 hover:bg-accent/30 active:bg-accent/50 transition-colors text-left touch-manipulation"
                       onclick={() => toggleFeatured(card.id)}
                     >
                       {#if cardImageUrl(card)}
@@ -462,13 +465,13 @@
                       {:else}
                         <div class="w-full aspect-[0.718] rounded bg-muted flex items-center justify-center text-xs mb-1">?</div>
                       {/if}
-                      <span class="text-[10px] truncate w-full">{card.name ?? card.id}</span>
+                      <span class="text-xs truncate w-full">{card.name ?? card.id}</span>
                     </button>
                   {/each}
                 </div>
               {/if}
               {#if featuredIds.length > 0}
-                <Button variant="outline" size="sm" class="mt-2" onclick={saveFeatured} disabled={savingFeatured}>
+                <Button variant="outline" size="sm" class="mt-2 w-full sm:w-auto min-h-[44px]" onclick={saveFeatured} disabled={savingFeatured}>
                   {savingFeatured ? 'Saving…' : 'Save profile cards'}
                 </Button>
               {/if}
@@ -487,22 +490,22 @@
           aria-label="Public profile preview"
         >
           <div class="flex items-center justify-between gap-2 p-3 border-b border-border bg-card/80 shrink-0">
-            <h2 class="font-display text-lg tracking-tight uppercase">Public profile preview</h2>
+            <h2 class="font-display text-base sm:text-lg tracking-tight uppercase truncate pr-2">Preview</h2>
             <button
               type="button"
-              class="rounded-lg p-2 text-muted-foreground hover:text-foreground hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary"
+              class="rounded-lg p-3 -mr-1 text-muted-foreground hover:text-foreground hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary min-w-[44px] min-h-[44px] flex items-center justify-center"
               aria-label="Close preview"
               onclick={() => (showPreview = false)}
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
-          <div class="flex-1 min-h-0 p-3">
+          <div class="flex-1 min-h-0 p-3 profile-preview-content">
             <iframe
               title="Public profile view"
               src="/u/{encodeURIComponent(profile.user_id)}"
               class="profile-preview-iframe w-full h-full rounded-lg border border-border bg-background"
-              sandbox="allow-same-origin allow-scripts"
+              sandbox="allow-scripts allow-popups"
               referrerpolicy="strict-origin-when-cross-origin"
             />
           </div>
@@ -513,6 +516,18 @@
 </div>
 
 <style>
+  .profile-page-mobile {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  .profile-preview-overlay {
+    padding-top: env(safe-area-inset-top);
+  }
+  .profile-preview-content {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+  .profile-featured-scroll {
+    -webkit-overflow-scrolling: touch;
+  }
   .card-picker-scroll {
     scrollbar-width: thin;
     scrollbar-color: var(--color-primary) var(--color-muted);

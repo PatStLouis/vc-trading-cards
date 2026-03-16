@@ -145,7 +145,7 @@
 </svelte:head>
 
 <div
-  class="public-profile min-h-screen p-4 sm:p-6 font-[family:var(--font-heading)]"
+  class="public-profile public-profile__scroll h-[100dvh] h-screen p-4 sm:p-6 font-[family:var(--font-heading)]"
   style="--profile-accent: {accentVar};"
 >
   <div class="max-w-2xl mx-auto">
@@ -297,6 +297,25 @@
   .public-profile {
     font-family: var(--font-heading);
     background: linear-gradient(180deg, hsl(var(--color-background)) 0%, hsl(var(--color-muted) / 0.3) 100%);
+  }
+  .public-profile__scroll {
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .public-profile__scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+  .public-profile__scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .public-profile__scroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 4px;
+  }
+  .public-profile__scroll::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.3);
   }
   .profile-card {
     background: linear-gradient(145deg, hsl(var(--color-card) / 0.95) 0%, hsl(var(--color-card)) 100%);
