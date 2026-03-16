@@ -90,9 +90,29 @@
 
   const userId = $derived($page.params.userId);
 
+  /** Same payload as backend embed version so copied link cache-busts Discord when pasted. */
+  async function embedVersion(): Promise<string> {
+    if (!user) return '';
+    const payload = JSON.stringify([
+      user.featured_card_ids ?? [],
+      (user.profile_headline ?? '').slice(0, 200),
+      (user.profile_bio ?? '').slice(0, 500),
+      user.collection_count,
+    ]);
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload));
+    return Array.from(new Uint8Array(buf))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+      .slice(0, 12);
+  }
+
   async function copyProfileUrl() {
     if (!userId || typeof window === 'undefined') return;
-    const url = `${window.location.origin}/u/${encodeURIComponent(userId)}`;
+    const version = await embedVersion();
+    const path = `/u/${encodeURIComponent(userId)}`;
+    const url = version
+      ? `${window.location.origin}${path}?v=${version}`
+      : `${window.location.origin}${path}`;
     try {
       await navigator.clipboard.writeText(url);
       copied = true;
