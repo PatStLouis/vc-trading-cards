@@ -12,6 +12,7 @@
   type Card = {
     id: string; set_id: string; name: string; number: string; rarity: string; set_name: string;
     image_path: string; types: string[]; subtypes: string; supertype: string; card_back_path?: string;
+    copy_count?: number;
   };
   type User = { user_id: string; username: string; poser_username?: string | null; collection_count: number };
 
@@ -70,23 +71,16 @@
     return '/card-back.svg';
   }
 
-  // Group user collection by card (set + name + number) and count, like My deck
+  // API returns one row per distinct card with copy_count from ledger; use it for display
   function userCollectionGroupKey(card: Card): string {
-    const set = (card?.set_id ?? card?.set_name ?? '').trim();
-    const name = (card?.name ?? '').trim();
-    const num = (card?.number ?? '').trim();
-    return `${set}:${name}:${num}`;
+    return card?.id ?? `${card?.set_id}:${card?.name}:${card?.number}`;
   }
   const userCollectionGrouped = $derived.by(() => {
     const list = userCollection || [];
-    const map = new Map<string, { card: Card; count: number }>();
-    for (const card of list) {
-      const key = userCollectionGroupKey(card);
-      const existing = map.get(key);
-      if (existing) existing.count += 1;
-      else map.set(key, { card: { ...card }, count: 1 });
-    }
-    return Array.from(map.values());
+    return list.map((card) => ({
+      card: { ...card },
+      count: card.copy_count ?? 1,
+    }));
   });
 
   onMount(async () => {

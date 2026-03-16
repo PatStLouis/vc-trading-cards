@@ -18,6 +18,7 @@ from app.db import (
     get_card,
     list_owners_for_card,
     list_collection_for_user,
+    list_ledger,
     search_users,
     get_user_public,
 )
@@ -94,3 +95,12 @@ async def public_user_collection(identifier: str):
         raise HTTPException(status_code=404, detail="User not found")
     cards = await list_collection_for_user(user["user_id"])
     return {"user": user, "cards": cards}
+
+
+@router.get("/ledger", summary="List ledger (public)", tags=["Public · Ledger"])
+async def public_ledger(limit: int = 100, event_type: str | None = None):
+    """List card issuance and trade ledger entries. Public. Optional filter: event_type (e.g. card.issued, card.traded)."""
+    if limit < 1 or limit > 200:
+        limit = 100
+    entries = await list_ledger(limit=limit, event_type=event_type)
+    return {"entries": entries}

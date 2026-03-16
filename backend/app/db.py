@@ -1227,17 +1227,18 @@ async def append_card_event(
 async def apply_card_issued_event(card_id: str, to_user_id: str, actor_user_id: str | None) -> dict | None:
     """
     Event-driven issuance: append card.issued event then apply to admin_issued_cards in one transaction.
-    Returns the issuance row { id, card_id, user_id, issued_at } or None.
+    Stores issued_card_id in ledger metadata for public ledger display. Returns the issuance row or None.
     """
     import json
     pool = _get_pool()
     payload = {"card_id": card_id, "to_user_id": to_user_id, "actor_user_id": actor_user_id}
     meta_json = json.dumps(payload)
     async with pool.acquire() as conn:
-        await conn.execute(
+        ledger_row = await conn.fetchrow(
             """
             INSERT INTO card_ledger (event_type, card_id, to_user_id, from_user_id, actor_user_id, metadata)
             VALUES ($1, $2::uuid, $3::uuid, NULL, $4::uuid, $5::jsonb)
+            RETURNING id
             """,
             EVENT_CARD_ISSUED,
             card_id,
@@ -1254,6 +1255,14 @@ async def apply_card_issued_event(card_id: str, to_user_id: str, actor_user_id: 
             card_id,
             to_user_id.strip(),
         )
+        if row and ledger_row:
+            await conn.execute(
+                """
+                UPDATE card_ledger SET metadata = metadata || $1::jsonb WHERE id = $2::uuid
+                """,
+                json.dumps({"issued_card_id": str(row["id"])}),
+                ledger_row["id"],
+            )
         if row:
             await conn.execute(
                 """
@@ -1327,7 +1336,7 @@ async def list_ledger(
         rows = await conn.fetch(
             f"""
             SELECT l.id, l.event_type, l.card_id, l.to_user_id, l.from_user_id, l.actor_user_id, l.created_at, l.metadata,
-                   c.name AS card_name, c.number AS card_number, c.set_name AS card_set_name,
+                   c.name AS card_name, c.number AS card_number, c.set_name AS card_set_name, c.image_path AS card_image_path,
                    to_ua.provider_username AS to_username,
                    from_ua.provider_username AS from_username,
                    COALESCE(actor_d.provider_username, actor_t.provider_username) AS actor_username
@@ -1352,6 +1361,8 @@ async def list_ledger(
         # For issuances, show issuer in From column (who issued the card)
         if r["event_type"] == EVENT_CARD_ISSUED:
             from_name = actor_name
+        meta = r.get("metadata") or {}
+        issued_card_id = meta.get("issued_card_id") if isinstance(meta, dict) else None
         out.append({
             "id": str(r["id"]),
             "event_type": r["event_type"],
@@ -1359,6 +1370,7 @@ async def list_ledger(
             "card_name": r["card_name"] or "",
             "card_number": r["card_number"] or "",
             "card_set_name": r["card_set_name"] or "",
+            "card_image_path": r.get("card_image_path") or "",
             "to_user_id": str(r["to_user_id"]),
             "to_username": r["to_username"] or str(r["to_user_id"]),
             "from_user_id": from_uid,
@@ -1366,7 +1378,8 @@ async def list_ledger(
             "actor_user_id": actor_uid,
             "actor_username": actor_name,
             "created_at": _format_date(r["created_at"]),
-            "payload": r.get("metadata"),
+            "issued_card_id": issued_card_id,
+            "payload": meta,
         })
     return out
 
@@ -1408,16 +1421,16 @@ async def sync_user_collection(user_id: str, card_credential_pairs: list[tuple[s
 
 
 async def list_owners_for_card(card_id: str) -> list[dict]:
-    """List users who have this card in their (synced) collection. Public."""
+    """List users who have this card (from ledger / admin_issued_cards). Public."""
     pool = _get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT u.user_id, ua.provider_username
-            FROM user_collection c
-            JOIN users u ON u.user_id = c.user_id
+            SELECT DISTINCT u.user_id, ua.provider_username
+            FROM admin_issued_cards a
+            JOIN users u ON u.user_id = a.user_id
             LEFT JOIN user_accounts ua ON ua.user_id = u.user_id AND ua.provider = 'discord'
-            WHERE c.card_id = $1::uuid
+            WHERE a.card_id = $1::uuid
             ORDER BY ua.provider_username
             """,
             card_id,
@@ -1429,23 +1442,32 @@ async def list_owners_for_card(card_id: str) -> list[dict]:
 
 
 async def list_collection_for_user(user_id: str) -> list[dict]:
-    """List cards in a user's (synced) collection. Returns card dicts with card_back_path from set. Public."""
+    """List cards in user's collection from ledger (admin_issued_cards). Returns card dicts with copy_count and card_back_path. Public."""
     pool = _get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT c.id, c.set_id, c.name, c.number, c.rarity, c.set_name, c.quote, c.artwork,
                    c.image_path, c.photograph, c.artist, c.band, c.types, c.subtypes, c.supertype,
-                   c.created_at, c.updated_at, c.card_id, s.card_back_path
-            FROM user_collection uc
-            JOIN cards c ON c.id = uc.card_id
+                   c.created_at, c.updated_at, c.card_id, s.card_back_path,
+                   COUNT(a.id)::int AS copy_count
+            FROM admin_issued_cards a
+            JOIN cards c ON c.id = a.card_id
             LEFT JOIN card_sets s ON s.id = c.set_id
-            WHERE uc.user_id = $1::uuid
+            WHERE a.user_id = $1::uuid
+            GROUP BY c.id, c.set_id, c.name, c.number, c.rarity, c.set_name, c.quote, c.artwork,
+                     c.image_path, c.photograph, c.artist, c.band, c.types, c.subtypes, c.supertype,
+                     c.created_at, c.updated_at, c.card_id, s.card_back_path
             ORDER BY c.set_name, c.number, c.name
             """,
             user_id,
         )
-    return [_row_to_card(r) for r in rows]
+    out = []
+    for r in rows:
+        card = _row_to_card(dict(r))
+        card["copy_count"] = int(r.get("copy_count") or 1)
+        out.append(card)
+    return out
 
 
 async def search_users(q: str, limit: int = 50) -> list[dict]:
@@ -1458,7 +1480,7 @@ async def search_users(q: str, limit: int = 50) -> list[dict]:
             """
             SELECT DISTINCT ON (u.user_id)
                    u.user_id, u.poser_username, ua.provider_username,
-                   (SELECT COUNT(*) FROM user_collection c WHERE c.user_id = u.user_id) AS collection_count
+                   (SELECT COUNT(*) FROM admin_issued_cards a WHERE a.user_id = u.user_id) AS collection_count
             FROM user_accounts ua
             JOIN users u ON u.user_id = ua.user_id
             WHERE ua.provider_username ILIKE $1
@@ -1570,7 +1592,7 @@ async def get_user_by_poser_username(poser_username: str) -> dict | None:
             SELECT u.user_id,
                    u.poser_username,
                    (SELECT ua.provider_username FROM user_accounts ua WHERE ua.user_id = u.user_id AND ua.provider = 'discord' LIMIT 1) AS display_username,
-                   (SELECT COUNT(*) FROM user_collection c WHERE c.user_id = u.user_id) AS collection_count
+                   (SELECT COUNT(*) FROM admin_issued_cards a WHERE a.user_id = u.user_id) AS collection_count
             FROM users u
             WHERE LOWER(u.poser_username) = $1
             """,
@@ -1872,7 +1894,7 @@ async def get_user_public(identifier: str) -> dict | None:
                    (SELECT ua.provider_avatar FROM user_accounts ua WHERE ua.user_id = u.user_id AND ua.provider = 'discord' LIMIT 1) AS discord_provider_avatar,
                    (SELECT ua.provider_banner FROM user_accounts ua WHERE ua.user_id = u.user_id AND ua.provider = 'discord' LIMIT 1) AS discord_provider_banner,
                    (SELECT ua.provider_accent_color FROM user_accounts ua WHERE ua.user_id = u.user_id AND ua.provider = 'discord' LIMIT 1) AS discord_provider_accent_color,
-                   (SELECT COUNT(*) FROM user_collection c WHERE c.user_id = u.user_id) AS collection_count
+                   (SELECT COUNT(*) FROM admin_issued_cards a WHERE a.user_id = u.user_id) AS collection_count
             FROM users u WHERE u.user_id = $1::uuid
             """,
             user_id,

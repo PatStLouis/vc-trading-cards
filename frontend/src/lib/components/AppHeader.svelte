@@ -52,6 +52,7 @@
       </h1>
       {#if !user && showExploreButton}
         <Button variant="outline" size="sm" href="/catalogue" class="shrink-0 no-underline hover:no-underline transition-transform duration-200 hover:scale-[1.02] active:scale-[0.98]">Explore catalogue</Button>
+        <Button variant="ghost" size="sm" href="/ledger" class="shrink-0 no-underline hover:no-underline">Ledger</Button>
       {/if}
     </nav>
     <div class="flex items-center gap-4 shrink-0">
@@ -97,6 +98,7 @@
             >
               <a href="/wallet" class="app-header__dropdown-item block w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-accent rounded-none first:rounded-t-lg focus:outline-none focus:bg-accent" role="menuitem">My Deck</a>
               <a href="/catalogue" class="app-header__dropdown-item block w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-accent focus:outline-none focus:bg-accent" role="menuitem">Browse Catalogue</a>
+              <a href="/ledger" class="app-header__dropdown-item block w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-accent focus:outline-none focus:bg-accent" role="menuitem">Ledger</a>
               <a href="/wallet/account" class="app-header__dropdown-item block w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-accent focus:outline-none focus:bg-accent" role="menuitem">Account</a>
               <a href="/wallet/profile" class="app-header__dropdown-item block w-full text-left px-4 py-2.5 text-sm text-foreground hover:bg-accent focus:outline-none focus:bg-accent" role="menuitem">Profile</a>
               {#if user.is_admin}
