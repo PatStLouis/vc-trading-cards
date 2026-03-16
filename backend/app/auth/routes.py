@@ -142,6 +142,9 @@ async def _handle_discord_callback(request: Request, code: str):
     provider_username = user_data.get("username") or user_data.get("global_name") or ""
     provider_avatar = (user_data.get("avatar") or "").strip() or None
     provider_discriminator = (user_data.get("discriminator") or "").strip() or None
+    provider_banner = (user_data.get("banner") or "").strip() or None
+    accent_raw = user_data.get("accent_color")
+    provider_accent_color = f"#{accent_raw:06x}" if isinstance(accent_raw, int) else ((str(accent_raw).strip() or None) if accent_raw is not None else None)
 
     cookie = request.cookies.get(settings.session_cookie_name)
     session = decode_session(cookie) if cookie else None
@@ -149,7 +152,10 @@ async def _handle_discord_callback(request: Request, code: str):
 
     if current_user_id:
         await ensure_user_exists(current_user_id)
-        result = await add_account_binding(current_user_id, "discord", provider_user_id, provider_username, provider_avatar, provider_discriminator)
+        result = await add_account_binding(
+            current_user_id, "discord", provider_user_id, provider_username,
+            provider_avatar, provider_discriminator, provider_banner, provider_accent_color,
+        )
         if result == "duplicate":
             return _frontend_redirect("/wallet/account", "linked=discord")
         if result == "conflict":
@@ -158,7 +164,10 @@ async def _handle_discord_callback(request: Request, code: str):
                 await merge_users(current_user_id, other_user_id)
         return _frontend_redirect("/wallet", "merged=discord")
     else:
-        user_id = await get_or_create_user_by_provider("discord", provider_user_id, provider_username, provider_avatar, provider_discriminator)
+        user_id = await get_or_create_user_by_provider(
+            "discord", provider_user_id, provider_username, provider_avatar, provider_discriminator,
+            provider_banner, provider_accent_color,
+        )
         tenant = await _ensure_tenant_sync(user_id, provider_username, provider_user_id)
         if not tenant:
             return _frontend_redirect("/", "error=tenant_failed")

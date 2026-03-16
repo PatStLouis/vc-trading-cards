@@ -272,7 +272,12 @@ async def refresh_discord_profile(user: dict = Depends(get_current_user)):
     discriminator = discord_user.get("discriminator")
     if discriminator is not None:
         discriminator = str(discriminator).strip()
-    updated = await update_discord_profile_for_user(user["user_id"], username, avatar, discriminator)
+    banner = (discord_user.get("banner") or "").strip() or None
+    accent_raw = discord_user.get("accent_color")
+    accent_color = f"#{accent_raw:06x}" if isinstance(accent_raw, int) else ((str(accent_raw).strip() or None) if accent_raw is not None else None)
+    updated = await update_discord_profile_for_user(
+        user["user_id"], username, avatar, discriminator, banner, accent_color,
+    )
     if not updated:
         raise HTTPException(status_code=500, detail="Failed to update profile")
     return await me(user=user)

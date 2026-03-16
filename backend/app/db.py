@@ -78,6 +78,8 @@ async def init_db():
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_user_accounts_provider ON user_accounts(provider, provider_user_id)")
         await conn.execute("ALTER TABLE user_accounts ADD COLUMN IF NOT EXISTS provider_avatar TEXT")
         await conn.execute("ALTER TABLE user_accounts ADD COLUMN IF NOT EXISTS provider_discriminator TEXT")
+        await conn.execute("ALTER TABLE user_accounts ADD COLUMN IF NOT EXISTS provider_banner TEXT")
+        await conn.execute("ALTER TABLE user_accounts ADD COLUMN IF NOT EXISTS provider_accent_color TEXT")
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS user_tenant (
                 user_id UUID PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
@@ -292,7 +294,13 @@ async def get_user_by_provider(provider: str, provider_user_id: str) -> str | No
 
 
 async def get_or_create_user_by_provider(
-    provider: str, provider_user_id: str, provider_username: str = "", provider_avatar: str | None = None, provider_discriminator: str | None = None
+    provider: str,
+    provider_user_id: str,
+    provider_username: str = "",
+    provider_avatar: str | None = None,
+    provider_discriminator: str | None = None,
+    provider_banner: str | None = None,
+    provider_accent_color: str | None = None,
 ) -> str:
     """Get or create user for (provider, provider_user_id). Returns user_id."""
     pool = _get_pool()
@@ -306,8 +314,8 @@ async def get_or_create_user_by_provider(
         )
         await conn.execute(
             """
-            INSERT INTO user_accounts (user_id, provider, provider_user_id, provider_username, provider_avatar, provider_discriminator)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO user_accounts (user_id, provider, provider_user_id, provider_username, provider_avatar, provider_discriminator, provider_banner, provider_accent_color)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             """,
             user_id,
             provider,
@@ -315,18 +323,27 @@ async def get_or_create_user_by_provider(
             (provider_username or "").strip(),
             (provider_avatar or "").strip() or None,
             (provider_discriminator or "").strip() or None,
+            (provider_banner or "").strip() or None,
+            (provider_accent_color or "").strip() or None,
         )
     await ensure_poser_username(str(user_id))
     return str(user_id)
 
 
 async def add_account_binding(
-    user_id: str, provider: str, provider_user_id: str, provider_username: str = "", provider_avatar: str | None = None, provider_discriminator: str | None = None
+    user_id: str,
+    provider: str,
+    provider_user_id: str,
+    provider_username: str = "",
+    provider_avatar: str | None = None,
+    provider_discriminator: str | None = None,
+    provider_banner: str | None = None,
+    provider_accent_color: str | None = None,
 ) -> str | None:
     """
     Add provider account to user. Returns None if success.
     Returns 'conflict' if (provider, provider_user_id) already linked to another user (merge needed).
-    Returns 'duplicate' if already linked to this user (profile updated with latest username/avatar/discriminator).
+    Returns 'duplicate' if already linked to this user (profile updated with latest username/avatar/discriminator/banner/accent).
     """
     pool = _get_pool()
     provider_user_id = provider_user_id.strip()
@@ -341,12 +358,14 @@ async def add_account_binding(
             if existing_user == user_id:
                 await conn.execute(
                     """
-                    UPDATE user_accounts SET provider_username = $1, provider_avatar = $2, provider_discriminator = $3
-                    WHERE provider = $4 AND provider_user_id = $5
+                    UPDATE user_accounts SET provider_username = $1, provider_avatar = $2, provider_discriminator = $3, provider_banner = $4, provider_accent_color = $5
+                    WHERE provider = $6 AND provider_user_id = $7
                     """,
                     (provider_username or "").strip(),
                     (provider_avatar or "").strip() or None,
                     (provider_discriminator or "").strip() or None,
+                    (provider_banner or "").strip() or None,
+                    (provider_accent_color or "").strip() or None,
                     provider,
                     provider_user_id,
                 )
@@ -354,8 +373,8 @@ async def add_account_binding(
             return "conflict"
         await conn.execute(
             """
-            INSERT INTO user_accounts (user_id, provider, provider_user_id, provider_username, provider_avatar, provider_discriminator)
-            VALUES ($1::uuid, $2, $3, $4, $5, $6)
+            INSERT INTO user_accounts (user_id, provider, provider_user_id, provider_username, provider_avatar, provider_discriminator, provider_banner, provider_accent_color)
+            VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8)
             """,
             user_id,
             provider,
@@ -363,6 +382,8 @@ async def add_account_binding(
             (provider_username or "").strip(),
             (provider_avatar or "").strip() or None,
             (provider_discriminator or "").strip() or None,
+            (provider_banner or "").strip() or None,
+            (provider_accent_color or "").strip() or None,
         )
     await ensure_poser_username(user_id)
     return None
@@ -422,7 +443,7 @@ async def get_user_accounts(user_id: str) -> list[dict]:
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
-            SELECT provider, provider_user_id, provider_username, provider_avatar, provider_discriminator
+            SELECT provider, provider_user_id, provider_username, provider_avatar, provider_discriminator, provider_banner, provider_accent_color
             FROM user_accounts WHERE user_id = $1::uuid ORDER BY provider
             """,
             user_id,
@@ -434,6 +455,8 @@ async def get_user_accounts(user_id: str) -> list[dict]:
             "provider_username": r["provider_username"] or r["provider_user_id"],
             "provider_avatar": r["provider_avatar"] if r.get("provider_avatar") else None,
             "provider_discriminator": r["provider_discriminator"] if r.get("provider_discriminator") else None,
+            "provider_banner": r["provider_banner"] if r.get("provider_banner") else None,
+            "provider_accent_color": r["provider_accent_color"] if r.get("provider_accent_color") else None,
         }
         for r in rows
     ]
@@ -444,19 +467,23 @@ async def update_discord_profile_for_user(
     provider_username: str,
     provider_avatar: str | None = None,
     provider_discriminator: str | None = None,
+    provider_banner: str | None = None,
+    provider_accent_color: str | None = None,
 ) -> bool:
-    """Update Discord account profile (username, avatar hash, discriminator) for the given user. Returns True if a row was updated."""
+    """Update Discord account profile (username, avatar, discriminator, banner, accent_color) for the given user. Returns True if a row was updated."""
     pool = _get_pool()
     async with pool.acquire() as conn:
         result = await conn.execute(
             """
             UPDATE user_accounts
-            SET provider_username = $1, provider_avatar = $2, provider_discriminator = $3
-            WHERE user_id = $4::uuid AND provider = 'discord'
+            SET provider_username = $1, provider_avatar = $2, provider_discriminator = $3, provider_banner = $4, provider_accent_color = $5
+            WHERE user_id = $6::uuid AND provider = 'discord'
             """,
             (provider_username or "").strip(),
             (provider_avatar or "").strip() or None,
             (provider_discriminator or "").strip() or None,
+            (provider_banner or "").strip() or None,
+            (provider_accent_color or "").strip() or None,
             user_id,
         )
     return result and "UPDATE 1" in result
@@ -1674,6 +1701,14 @@ def _discord_avatar_url(provider_user_id: str | None, provider_avatar: str | Non
     return f"https://cdn.discordapp.com/avatars/{provider_user_id}/{provider_avatar}.{ext}?size={size}"
 
 
+def _discord_banner_url(provider_user_id: str | None, provider_banner: str | None, size: int = 600) -> str | None:
+    """Build Discord CDN banner URL. Returns None if missing hash or user id."""
+    if not provider_banner or not provider_user_id:
+        return None
+    ext = "gif" if (provider_banner or "").startswith("a_") else "png"
+    return f"https://cdn.discordapp.com/banners/{provider_user_id}/{provider_banner}.{ext}?size={size}"
+
+
 def _profile_song_upload_url(relative_path: str | None) -> str | None:
     """Return full URL for profile song upload, or None."""
     if not relative_path or not (p := str(relative_path).strip()):
@@ -1835,6 +1870,8 @@ async def get_user_public(identifier: str) -> dict | None:
                    (SELECT ua.provider_username FROM user_accounts ua WHERE ua.user_id = u.user_id AND ua.provider = 'discord' LIMIT 1) AS username,
                    (SELECT ua.provider_user_id FROM user_accounts ua WHERE ua.user_id = u.user_id AND ua.provider = 'discord' LIMIT 1) AS discord_provider_user_id,
                    (SELECT ua.provider_avatar FROM user_accounts ua WHERE ua.user_id = u.user_id AND ua.provider = 'discord' LIMIT 1) AS discord_provider_avatar,
+                   (SELECT ua.provider_banner FROM user_accounts ua WHERE ua.user_id = u.user_id AND ua.provider = 'discord' LIMIT 1) AS discord_provider_banner,
+                   (SELECT ua.provider_accent_color FROM user_accounts ua WHERE ua.user_id = u.user_id AND ua.provider = 'discord' LIMIT 1) AS discord_provider_accent_color,
                    (SELECT COUNT(*) FROM user_collection c WHERE c.user_id = u.user_id) AS collection_count
             FROM users u WHERE u.user_id = $1::uuid
             """,
@@ -1849,6 +1886,14 @@ async def get_user_public(identifier: str) -> dict | None:
         row.get("discord_provider_avatar"),
         256,
     )
+    discord_accent = (row.get("discord_provider_accent_color") or "").strip() or None
+    custom_accent = (row.get("profile_accent_color") or "").strip() or None
+    profile_accent_color = discord_accent or custom_accent
+    banner_url = _discord_banner_url(
+        row.get("discord_provider_user_id"),
+        row.get("discord_provider_banner"),
+        600,
+    )
     return {
         "user_id": str(row["user_id"]),
         "discord_sub": None,
@@ -1861,7 +1906,8 @@ async def get_user_public(identifier: str) -> dict | None:
         "profile_bio": (row.get("profile_bio") or "").strip() or None,
         "profile_song_url": None if upload_path else ((row.get("profile_song_url") or "").strip() or None),
         "profile_song_upload_url": _profile_song_upload_url(upload_path),
-        "profile_accent_color": (row.get("profile_accent_color") or "").strip() or None,
+        "profile_accent_color": profile_accent_color,
+        "banner_url": banner_url,
     }
 
 

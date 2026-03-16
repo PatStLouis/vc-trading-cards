@@ -2,7 +2,6 @@
   import { page } from '$app/stores';
   import { fetchApi, apiUrl } from '$lib/api';
   import { onMount, tick } from 'svelte';
-  import { effect } from 'svelte';
 
   const API = apiUrl();
   function cardImageUrl(card: Card): string {
@@ -24,6 +23,7 @@
     profile_song_url?: string | null;
     profile_song_upload_url?: string | null;
     profile_accent_color?: string | null;
+    banner_url?: string | null;
   };
 
   function isYouTubeUrl(url: string): boolean {
@@ -124,6 +124,11 @@
     if (clipboardBlocked) {
       fallbackUrl = url;
       showCopyFallback = true;
+      await tick();
+      requestAnimationFrame(() => {
+        fallbackInputEl?.focus();
+        fallbackInputEl?.select();
+      });
       return;
     }
     try {
@@ -134,6 +139,11 @@
     } catch (_) {
       fallbackUrl = url;
       showCopyFallback = true;
+      await tick();
+      requestAnimationFrame(() => {
+        fallbackInputEl?.focus();
+        fallbackInputEl?.select();
+      });
     }
   }
 
@@ -141,15 +151,6 @@
     showCopyFallback = false;
     fallbackUrl = '';
   }
-
-  effect(() => {
-    if (showCopyFallback && fallbackUrl) {
-      tick().then(() => {
-        fallbackInputEl?.focus();
-        fallbackInputEl?.select();
-      });
-    }
-  });
 
   onMount(() => {
     try {
@@ -224,54 +225,63 @@
     {:else if user}
       <!-- MySpace/SpaceHey-style profile card -->
       <article class="profile-card rounded-2xl border-2 border-border overflow-hidden bg-card/80 shadow-xl relative">
-        <!-- Accent banner strip -->
-        <div class="profile-banner h-2 sm:h-3" style="background: var(--profile-accent);" aria-hidden="true"></div>
+        <!-- Top section: Discord banner (if present) + accent strip + avatar/headline -->
+        <div
+          class="profile-top"
+          style={user.banner_url
+            ? `--profile-banner: url(${user.banner_url}); background-image: linear-gradient(to bottom, hsl(0 0% 0% / 0.5), hsl(0 0% 0% / 0.3)), var(--profile-banner);`
+            : ''}
+        >
+          <div class="profile-banner h-2 sm:h-3" style="background: var(--profile-accent);" aria-hidden="true"></div>
+          <div class="profile-top__inner p-5 sm:p-6 pb-4 relative">
+            <button
+              type="button"
+              class="absolute top-4 right-4 p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-card transition-colors"
+              onclick={copyProfileUrl}
+              aria-label={copied ? 'Copied!' : 'Share profile (copy link)'}
+              title={copied ? 'Copied!' : 'Copy profile link'}
+            >
+              {#if copied}
+                <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+              {:else}
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+              {/if}
+            </button>
+            {#if showCopyFallback}
+              <div class="copy-fallback" role="dialog" aria-label="Copy profile link" aria-modal="true">
+                <p class="copy-fallback__hint">Copy not available here. Select and copy (Ctrl+C):</p>
+                <input
+                  type="text"
+                  class="copy-fallback__input"
+                  readonly
+                  value={fallbackUrl}
+                  bind:this={fallbackInputEl}
+                />
+                <button type="button" class="copy-fallback__close" onclick={closeCopyFallback} aria-label="Close">×</button>
+              </div>
+            {/if}
+            <!-- Avatar + headline + display name -->
+            <header class="text-center">
+              {#if user.avatar_url}
+                <img
+                  src={user.avatar_url}
+                  alt=""
+                  class="mx-auto w-20 h-20 sm:w-24 sm:h-24 rounded-full border-2 border-[var(--profile-accent)] object-cover shrink-0 mb-3"
+                />
+              {/if}
+              <h1 class="profile-headline font-display text-2xl sm:text-3xl md:text-4xl tracking-tight uppercase text-foreground leading-tight">
+                {user.profile_headline || user.username || user.poser_username || 'Collector'}
+              </h1>
+              {#if user.profile_headline && (user.username || user.poser_username)}
+                <p class="text-sm text-muted-foreground mt-1">@{user.username || user.poser_username}</p>
+              {:else if user.poser_username && user.username !== user.poser_username}
+                <p class="text-sm text-muted-foreground mt-1 font-mono">{user.poser_username}</p>
+              {/if}
+            </header>
+          </div>
+        </div>
 
-        <div class="p-5 sm:p-6 space-y-6 relative">
-          <button
-            type="button"
-            class="absolute top-4 right-4 p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-card transition-colors"
-            onclick={copyProfileUrl}
-            aria-label={copied ? 'Copied!' : 'Share profile (copy link)'}
-            title={copied ? 'Copied!' : 'Copy profile link'}
-          >
-            {#if copied}
-              <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-            {:else}
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
-            {/if}
-          </button>
-          {#if showCopyFallback}
-            <div class="copy-fallback" role="dialog" aria-label="Copy profile link" aria-modal="true">
-              <p class="copy-fallback__hint">Copy not available here. Select and copy (Ctrl+C):</p>
-              <input
-                type="text"
-                class="copy-fallback__input"
-                readonly
-                value={fallbackUrl}
-                bind:this={fallbackInputEl}
-              />
-              <button type="button" class="copy-fallback__close" onclick={closeCopyFallback} aria-label="Close">×</button>
-            </div>
-          {/if}
-          <!-- Avatar + headline + display name -->
-          <header class="text-center">
-            {#if user.avatar_url}
-              <img
-                src={user.avatar_url}
-                alt=""
-                class="mx-auto w-20 h-20 sm:w-24 sm:h-24 rounded-full border-2 border-[var(--profile-accent)] object-cover shrink-0 mb-3"
-              />
-            {/if}
-            <h1 class="profile-headline font-display text-2xl sm:text-3xl md:text-4xl tracking-tight uppercase text-foreground leading-tight">
-              {user.profile_headline || user.username || user.poser_username || 'Collector'}
-            </h1>
-            {#if user.profile_headline && (user.username || user.poser_username)}
-              <p class="text-sm text-muted-foreground mt-1">@{user.username || user.poser_username}</p>
-            {:else if user.poser_username && user.username !== user.poser_username}
-              <p class="text-sm text-muted-foreground mt-1 font-mono">{user.poser_username}</p>
-            {/if}
-          </header>
+        <div class="p-5 sm:p-6 pt-2 space-y-6 relative">
 
           <!-- About me -->
           {#if user.profile_bio}
@@ -414,6 +424,11 @@
   }
   .profile-card {
     background: linear-gradient(145deg, hsl(var(--color-card) / 0.95) 0%, hsl(var(--color-card)) 100%);
+  }
+  .profile-top {
+    background-size: cover;
+    background-position: center top;
+    background-repeat: no-repeat;
   }
   .profile-banner {
     background: var(--profile-accent);

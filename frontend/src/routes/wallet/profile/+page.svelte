@@ -15,7 +15,6 @@
     profile_bio?: string | null;
     profile_song_url?: string | null;
     profile_song_upload_url?: string | null;
-    profile_accent_color?: string | null;
   };
 
   type CollectionCard = {
@@ -50,7 +49,6 @@
     profile_bio?: string | null;
     profile_song_url?: string | null;
     profile_song_upload_url?: string | null;
-    profile_accent_color?: string | null;
   };
   let me: MeProfile | null = $state(null);
   let profile: PublicUser | null = $state(null);
@@ -62,7 +60,6 @@
   let profileSongUploadUrl = $state<string | null>(null);
   type SongSource = 'youtube' | 'direct' | 'upload' | 'spotify';
   let profileSongSource = $state<SongSource>('youtube');
-  let profileAccentColor = $state('');
   let showPreview = $state(false);
   let savingFeatured = $state(false);
   let savingProfile = $state(false);
@@ -107,7 +104,6 @@
       else if (m.profile_song_url && isSpotifyUrl(m.profile_song_url)) profileSongSource = 'spotify';
       else if (m.profile_song_url) profileSongSource = 'direct';
       else profileSongSource = 'youtube';
-      profileAccentColor = m.profile_accent_color ?? '';
       const userId = m.user_id;
       if (!userId) {
         error = 'User not found';
@@ -225,7 +221,6 @@
       const body: Record<string, unknown> = {
         profile_headline: profileHeadline.trim() || null,
         profile_bio: profileBio.trim() || null,
-        profile_accent_color: profileAccentColor.trim() || null,
       };
       if (profileSongSource === 'youtube' || profileSongSource === 'direct' || profileSongSource === 'spotify') {
         body.profile_song_url = profileSongUrl.trim() || null;
@@ -250,9 +245,8 @@
       else if (data.profile_song_url && isSpotifyUrl(data.profile_song_url)) profileSongSource = 'spotify';
       else if (data.profile_song_url) profileSongSource = 'direct';
       else profileSongSource = 'youtube';
-      profileAccentColor = data.profile_accent_color ?? '';
-      if (me) me = { ...me, profile_headline: data.profile_headline, profile_bio: data.profile_bio, profile_song_url: data.profile_song_url, profile_song_upload_url: data.profile_song_upload_url, profile_accent_color: data.profile_accent_color };
-      if (profile) profile = { ...profile, profile_headline: data.profile_headline, profile_bio: data.profile_bio, profile_song_url: data.profile_song_url, profile_accent_color: data.profile_accent_color };
+      if (me) me = { ...me, profile_headline: data.profile_headline, profile_bio: data.profile_bio, profile_song_url: data.profile_song_url, profile_song_upload_url: data.profile_song_upload_url };
+      if (profile) profile = { ...profile, profile_headline: data.profile_headline, profile_bio: data.profile_bio, profile_song_url: data.profile_song_url };
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to save';
     } finally {
@@ -393,27 +387,6 @@
                     {/if}
                   </div>
                 {/if}
-              </div>
-              <div>
-                <label for="profile-accent" class="text-xs text-muted-foreground">Profile accent color</label>
-                <div class="mt-1 flex gap-2 items-center">
-                  <input
-                    id="profile-accent"
-                    type="text"
-                    bind:value={profileAccentColor}
-                    maxlength="20"
-                    placeholder="#c41e3a or leave blank"
-                    class="flex-1 min-w-0 rounded-md border border-input bg-background px-3 py-3 sm:py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring min-h-[44px]"
-                  />
-                  {#if profileAccentColor}
-                    {@const hex = profileAccentColor.startsWith('#') && /^#[0-9A-Fa-f]{3,6}$/.test(profileAccentColor)}
-                    <span
-                      class="w-8 h-8 rounded-full border border-border shrink-0"
-                      style="background-color: {hex ? profileAccentColor : 'var(--color-muted)'}"
-                      aria-hidden="true"
-                    />
-                  {/if}
-                </div>
               </div>
               <Button variant="outline" size="sm" class="w-full sm:w-auto min-h-[44px]" onclick={saveProfileCustomization} disabled={savingProfile || uploadingSong}>
                 {savingProfile ? 'Saving…' : uploadingSong ? 'Uploading…' : 'Save profile'}
