@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 import base64
+import hashlib
 import io
+import json
 import logging
 import os
 
@@ -285,9 +287,20 @@ if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
                         return path
                     return f"{api_base}/uploads/{path}" if not path.startswith("/") else f"{api_base}{path}"
                 card_images = [card_image_url(c) for c in featured_cards if card_image_url(c)]
-                # Single composite image for Discord/social (they only show one); fallback to avatar or first card
+                # Cache-bust og:image so Discord/social re-fetch when profile changes (they cache by URL)
+                embed_version = hashlib.sha256(
+                    json.dumps(
+                        [
+                            profile.get("featured_card_ids") or [],
+                            (profile.get("profile_headline") or "")[:200],
+                            (profile.get("profile_bio") or "")[:500],
+                            profile.get("collection_count"),
+                        ],
+                        sort_keys=True,
+                    ).encode()
+                ).hexdigest()[:12]
                 if featured_cards:
-                    og_image = f"{base}/u/{user_id}/embed.png"
+                    og_image = f"{base}/u/{user_id}/embed.png?v={embed_version}"
                 else:
                     og_image = avatar_url or (card_images[0] if card_images else "")
                 meta_image_tag = f'<meta property="og:image" content="{_html_esc(og_image)}">' if og_image else ""
@@ -327,7 +340,13 @@ if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
 <p><img src="{qr_data_url}" alt="QR code: {_html_esc(profile_url)}" width="128" height="128"></p>
 </body>
 </html>"""
-                return HTMLResponse(html)
+                return HTMLResponse(
+                    html,
+                    headers={
+                        "Cache-Control": "no-cache, no-store, must-revalidate",
+                        "Pragma": "no-cache",
+                    },
+                )
             return FileResponse(_index_path, media_type="text/html", headers=_no_cache_headers)
 
         app.mount("/_app", StaticFiles(directory=_app_dir, html=False), name="frontend_app")
