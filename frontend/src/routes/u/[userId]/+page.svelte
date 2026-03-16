@@ -43,7 +43,6 @@
     } catch { return false; }
   }
 
-  /** Extract YouTube video ID from watch or short URL. */
   function youtubeVideoId(url: string): string | null {
     try {
       const u = new URL(url);
@@ -61,7 +60,6 @@
 
   const featuredCards = $derived((user?.featured_card_ids || []).map((id) => cards.find((c) => c.id === id)).filter(Boolean) as Card[]);
 
-  /** Use accent if it's a valid hex, else theme primary */
   const accentVar = $derived(
     user?.profile_accent_color && /^#[0-9A-Fa-f]{3,6}$/.test(user.profile_accent_color)
       ? user.profile_accent_color
@@ -72,7 +70,6 @@
     user?.profile_song_url && isYouTubeUrl(user.profile_song_url) ? youtubeVideoId(user.profile_song_url) : null
   );
 
-  /** Static embed URL using youtube-nocookie.com (no API script = no MIME error; no ads/tracking until play = fewer blocked requests). */
   function youtubeEmbedSrc(muted: boolean): string | null {
     const v = youtubeVideoIdResolved;
     if (!v) return null;
@@ -81,16 +78,13 @@
   }
 
   let user: PublicUser | null = $state(null);
-  /** Start unmuted; set to false and reload embed if we need to fall back to muted autoplay. */
   let youtubeUnmuted = $state(true);
-  /** When true, YouTube embed is unavailable (e.g. sandboxed iframe); show link instead. */
   let youtubeEmbedBlocked = $state(false);
   let cards: Card[] = $state([]);
   let loading = $state(true);
   let error = $state('');
   let copied = $state(false);
   let copyTimeout: ReturnType<typeof setTimeout> | null = null;
-  /** When true, Clipboard API is blocked (e.g. sandboxed iframe); show manual-copy fallback instead. */
   let clipboardBlocked = $state(false);
   let showCopyFallback = $state(false);
   let fallbackUrl = $state('');
@@ -98,7 +92,6 @@
 
   const userId = $derived($page.params.userId);
 
-  /** Same payload as backend embed version so copied link cache-busts Discord when pasted. */
   async function embedVersion(): Promise<string> {
     if (!user) return '';
     const payload = JSON.stringify([
@@ -121,14 +114,20 @@
     const url = version
       ? `${window.location.origin}${path}?v=${version}`
       : `${window.location.origin}${path}`;
-    if (clipboardBlocked) {
+
+    function showFallbackAndFocus() {
       fallbackUrl = url;
       showCopyFallback = true;
-      await tick();
-      requestAnimationFrame(() => {
-        fallbackInputEl?.focus();
-        fallbackInputEl?.select();
+      tick().then(() => {
+        requestAnimationFrame(() => {
+          fallbackInputEl?.focus();
+          fallbackInputEl?.select();
+        });
       });
+    }
+
+    if (clipboardBlocked) {
+      showFallbackAndFocus();
       return;
     }
     try {
@@ -136,14 +135,8 @@
       copied = true;
       if (copyTimeout) clearTimeout(copyTimeout);
       copyTimeout = setTimeout(() => { copied = false; copyTimeout = null; }, 2000);
-    } catch (_) {
-      fallbackUrl = url;
-      showCopyFallback = true;
-      await tick();
-      requestAnimationFrame(() => {
-        fallbackInputEl?.focus();
-        fallbackInputEl?.select();
-      });
+    } catch {
+      showFallbackAndFocus();
     }
   }
 
@@ -153,21 +146,17 @@
   }
 
   onMount(() => {
+    // Detect restricted context (e.g. sandboxed iframe) for YouTube embed and clipboard
     try {
       if (typeof caches === 'undefined') youtubeEmbedBlocked = true;
-      else caches.keys(); // throws in sandboxed context (e.g. profile preview iframe)
+      else caches.keys();
     } catch {
       youtubeEmbedBlocked = true;
     }
-    // Avoid calling Clipboard API in sandboxed iframe (prevents Permissions Policy violation)
     try {
-      if (typeof document !== 'undefined' && document.permissionsPolicy && !document.permissionsPolicy.allowsFeature('clipboard-write')) {
-        clipboardBlocked = true;
-      } else if (typeof window !== 'undefined' && window.self !== window.top) {
-        clipboardBlocked = true;
-      } else if (typeof navigator !== 'undefined' && !navigator.clipboard) {
-        clipboardBlocked = true;
-      }
+      if (document.permissionsPolicy && !document.permissionsPolicy.allowsFeature('clipboard-write')) clipboardBlocked = true;
+      else if (window.self !== window.top) clipboardBlocked = true;
+      else if (!navigator.clipboard) clipboardBlocked = true;
     } catch {
       clipboardBlocked = true;
     }

@@ -60,7 +60,6 @@
   let profileSongUploadUrl = $state<string | null>(null);
   type SongSource = 'youtube' | 'direct' | 'upload' | 'spotify';
   let profileSongSource = $state<SongSource>('youtube');
-  let showPreview = $state(false);
   let savingFeatured = $state(false);
   let savingProfile = $state(false);
   let uploadingSong = $state(false);
@@ -278,7 +277,15 @@
     {:else if profile}
       <div class="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-3 mb-4">
         <p class="text-xs text-muted-foreground">This is what others see when they look up your profile.</p>
-        <Button variant="destructive" size="sm" class="font-bold w-full sm:w-auto sm:ml-auto min-h-[44px]" onclick={() => (showPreview = true)}>Preview public profile</Button>
+        <a
+          href="/u/{encodeURIComponent(profile.user_id)}"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-flex items-center justify-center font-bold w-full sm:w-auto sm:ml-auto min-h-[44px] rounded-md border border-destructive/50 bg-destructive/10 px-4 py-2 text-sm text-destructive hover:bg-destructive/20 focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          Preview public profile
+          <svg class="w-4 h-4 ml-1.5 shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+        </a>
       </div>
 
       <section class="rounded-xl border border-border/80 bg-card/50 overflow-hidden">
@@ -454,36 +461,6 @@
         </div>
       </section>
 
-      <!-- Secured iframe preview of public profile -->
-      {#if showPreview && profile?.user_id}
-        <div
-          class="profile-preview-overlay fixed inset-0 z-[999999] flex flex-col bg-background/95 backdrop-blur-sm"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Public profile preview"
-        >
-          <div class="flex items-center justify-between gap-2 p-3 border-b border-border bg-card/80 shrink-0">
-            <h2 class="font-display text-base sm:text-lg tracking-tight uppercase truncate pr-2">Preview</h2>
-            <button
-              type="button"
-              class="rounded-lg p-3 -mr-1 text-muted-foreground hover:text-foreground hover:bg-accent focus:outline-none focus:ring-2 focus:ring-primary min-w-[44px] min-h-[44px] flex items-center justify-center"
-              aria-label="Close preview"
-              onclick={() => (showPreview = false)}
-            >
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-          </div>
-          <div class="flex-1 min-h-0 p-3 profile-preview-content">
-            <iframe
-              title="Public profile view"
-              src="/u/{encodeURIComponent(profile.user_id)}"
-              class="profile-preview-iframe w-full h-full rounded-lg border border-border bg-background"
-              sandbox="allow-scripts allow-popups"
-              referrerpolicy="strict-origin-when-cross-origin"
-            />
-          </div>
-        </div>
-      {/if}
     {/if}
   </div>
 </div>
@@ -491,12 +468,6 @@
 <style>
   .profile-page-mobile {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
-  }
-  .profile-preview-overlay {
-    padding-top: env(safe-area-inset-top);
-  }
-  .profile-preview-content {
-    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
   }
   .profile-featured-scroll {
     -webkit-overflow-scrolling: touch;
