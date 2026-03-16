@@ -1,7 +1,8 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { fetchApi, apiUrl } from '$lib/api';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
+  import { effect } from 'svelte';
 
   const API = apiUrl();
   function cardImageUrl(card: Card): string {
@@ -82,11 +83,18 @@
   let user: PublicUser | null = $state(null);
   /** Start unmuted; set to false and reload embed if we need to fall back to muted autoplay. */
   let youtubeUnmuted = $state(true);
+  /** When true, YouTube embed is unavailable (e.g. sandboxed iframe); show link instead. */
+  let youtubeEmbedBlocked = $state(false);
   let cards: Card[] = $state([]);
   let loading = $state(true);
   let error = $state('');
   let copied = $state(false);
   let copyTimeout: ReturnType<typeof setTimeout> | null = null;
+  /** When true, Clipboard API is blocked (e.g. sandboxed iframe); show manual-copy fallback instead. */
+  let clipboardBlocked = $state(false);
+  let showCopyFallback = $state(false);
+  let fallbackUrl = $state('');
+  let fallbackInputEl: HTMLInputElement | undefined = $state(undefined);
 
   const userId = $derived($page.params.userId);
 
@@ -113,15 +121,55 @@
     const url = version
       ? `${window.location.origin}${path}?v=${version}`
       : `${window.location.origin}${path}`;
+    if (clipboardBlocked) {
+      fallbackUrl = url;
+      showCopyFallback = true;
+      return;
+    }
     try {
       await navigator.clipboard.writeText(url);
       copied = true;
       if (copyTimeout) clearTimeout(copyTimeout);
       copyTimeout = setTimeout(() => { copied = false; copyTimeout = null; }, 2000);
-    } catch (_) {}
+    } catch (_) {
+      fallbackUrl = url;
+      showCopyFallback = true;
+    }
   }
 
+  function closeCopyFallback() {
+    showCopyFallback = false;
+    fallbackUrl = '';
+  }
+
+  effect(() => {
+    if (showCopyFallback && fallbackUrl) {
+      tick().then(() => {
+        fallbackInputEl?.focus();
+        fallbackInputEl?.select();
+      });
+    }
+  });
+
   onMount(() => {
+    try {
+      if (typeof caches === 'undefined') youtubeEmbedBlocked = true;
+      else caches.keys(); // throws in sandboxed context (e.g. profile preview iframe)
+    } catch {
+      youtubeEmbedBlocked = true;
+    }
+    // Avoid calling Clipboard API in sandboxed iframe (prevents Permissions Policy violation)
+    try {
+      if (typeof document !== 'undefined' && document.permissionsPolicy && !document.permissionsPolicy.allowsFeature('clipboard-write')) {
+        clipboardBlocked = true;
+      } else if (typeof window !== 'undefined' && window.self !== window.top) {
+        clipboardBlocked = true;
+      } else if (typeof navigator !== 'undefined' && !navigator.clipboard) {
+        clipboardBlocked = true;
+      }
+    } catch {
+      clipboardBlocked = true;
+    }
     if (!userId) {
       error = 'Invalid profile';
       loading = false;
@@ -193,6 +241,19 @@
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
             {/if}
           </button>
+          {#if showCopyFallback}
+            <div class="copy-fallback" role="dialog" aria-label="Copy profile link" aria-modal="true">
+              <p class="copy-fallback__hint">Copy not available here. Select and copy (Ctrl+C):</p>
+              <input
+                type="text"
+                class="copy-fallback__input"
+                readonly
+                value={fallbackUrl}
+                bind:this={fallbackInputEl}
+              />
+              <button type="button" class="copy-fallback__close" onclick={closeCopyFallback} aria-label="Close">×</button>
+            </div>
+          {/if}
           <!-- Avatar + headline + display name -->
           <header class="text-center">
             {#if user.avatar_url}
@@ -223,7 +284,8 @@
           <!-- Profile song: static iframe with youtube-nocookie.com (no external script = no MIME error; no ads until play = fewer blocked requests). -->
           {#if user.profile_song_url && isYouTubeUrl(user.profile_song_url)}
             {@const embedSrc = youtubeEmbedSrc(!youtubeUnmuted)}
-            {#if embedSrc}
+            {@const watchUrl = youtubeVideoIdResolved ? `https://www.youtube.com/watch?v=${youtubeVideoIdResolved}` : user.profile_song_url}
+            {#if embedSrc && !youtubeEmbedBlocked}
               <section class="profile-section">
                 <h2 class="profile-section__title">Currently listening</h2>
                 <div class="aspect-video rounded-lg overflow-hidden border border-border bg-black relative">
@@ -233,7 +295,7 @@
                     class="w-full h-full"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowfullscreen
-                  />
+                  ></iframe>
                   {#if !youtubeUnmuted}
                     <button
                       type="button"
@@ -244,6 +306,19 @@
                     </button>
                   {/if}
                 </div>
+              </section>
+            {:else if watchUrl}
+              <section class="profile-section">
+                <h2 class="profile-section__title">Currently listening</h2>
+                <a
+                  href={watchUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-2 rounded-lg border-2 border-[var(--profile-accent)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--profile-accent)] hover:bg-[var(--profile-accent)]/10 transition-colors"
+                >
+                  <span aria-hidden="true">▶</span>
+                  Play on YouTube
+                </a>
               </section>
             {/if}
           {:else if user.profile_song_url && isSpotifyUrl(user.profile_song_url)}
@@ -350,5 +425,52 @@
     text-transform: uppercase;
     color: var(--profile-accent);
     margin-bottom: 0.5rem;
+  }
+  .copy-fallback {
+    position: absolute;
+    top: 3.5rem;
+    right: 0.5rem;
+    left: 1rem;
+    z-index: 10;
+    padding: 0.75rem;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 12px hsl(0 0% 0% / 0.15);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .copy-fallback__hint {
+    width: 100%;
+    margin: 0;
+    font-size: 0.75rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .copy-fallback__input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.8rem;
+    font-family: ui-monospace, monospace;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.25rem;
+    background: hsl(var(--muted) / 0.3);
+    color: hsl(var(--foreground));
+  }
+  .copy-fallback__close {
+    padding: 0.25rem 0.5rem;
+    font-size: 1.25rem;
+    line-height: 1;
+    border: none;
+    background: transparent;
+    color: hsl(var(--muted-foreground));
+    cursor: pointer;
+    border-radius: 0.25rem;
+  }
+  .copy-fallback__close:hover {
+    color: hsl(var(--foreground));
+    background: hsl(var(--accent));
   }
 </style>
