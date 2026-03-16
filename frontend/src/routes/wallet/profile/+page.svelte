@@ -15,6 +15,7 @@
     profile_bio?: string | null;
     profile_song_url?: string | null;
     profile_song_upload_url?: string | null;
+    profile_accent_color?: string | null;
   };
 
   type CollectionCard = {
@@ -49,6 +50,7 @@
     profile_bio?: string | null;
     profile_song_url?: string | null;
     profile_song_upload_url?: string | null;
+    profile_accent_color?: string | null;
   };
   let me: MeProfile | null = $state(null);
   let profile: PublicUser | null = $state(null);
@@ -56,6 +58,7 @@
   let featuredIds: string[] = $state([]);
   let profileHeadline = $state('');
   let profileBio = $state('');
+  let profileAccentColor = $state('');
   let profileSongUrl = $state('');
   let profileSongUploadUrl = $state<string | null>(null);
   type SongSource = 'youtube' | 'direct' | 'upload' | 'spotify';
@@ -96,6 +99,7 @@
       featuredIds = [...(m.featured_card_ids || [])];
       profileHeadline = m.profile_headline ?? '';
       profileBio = m.profile_bio ?? '';
+      profileAccentColor = (m.profile_accent_color ?? '').trim();
       profileSongUrl = m.profile_song_url ?? '';
       profileSongUploadUrl = m.profile_song_upload_url ?? null;
       if (m.profile_song_upload_url) profileSongSource = 'upload';
@@ -220,6 +224,7 @@
       const body: Record<string, unknown> = {
         profile_headline: profileHeadline.trim() || null,
         profile_bio: profileBio.trim() || null,
+        profile_accent_color: profileAccentColor.trim() && /^#[0-9A-Fa-f]{3,6}$/.test(profileAccentColor.trim()) ? profileAccentColor.trim() : null,
       };
       if (profileSongSource === 'youtube' || profileSongSource === 'direct' || profileSongSource === 'spotify') {
         body.profile_song_url = profileSongUrl.trim() || null;
@@ -237,6 +242,7 @@
       const data = await res.json();
       profileHeadline = data.profile_headline ?? '';
       profileBio = data.profile_bio ?? '';
+      profileAccentColor = (data.profile_accent_color ?? '').trim();
       profileSongUrl = data.profile_song_url ?? '';
       profileSongUploadUrl = data.profile_song_upload_url ?? null;
       if (data.profile_song_upload_url) profileSongSource = 'upload';
@@ -244,8 +250,8 @@
       else if (data.profile_song_url && isSpotifyUrl(data.profile_song_url)) profileSongSource = 'spotify';
       else if (data.profile_song_url) profileSongSource = 'direct';
       else profileSongSource = 'youtube';
-      if (me) me = { ...me, profile_headline: data.profile_headline, profile_bio: data.profile_bio, profile_song_url: data.profile_song_url, profile_song_upload_url: data.profile_song_upload_url };
-      if (profile) profile = { ...profile, profile_headline: data.profile_headline, profile_bio: data.profile_bio, profile_song_url: data.profile_song_url };
+      if (me) me = { ...me, profile_headline: data.profile_headline, profile_bio: data.profile_bio, profile_accent_color: data.profile_accent_color, profile_song_url: data.profile_song_url, profile_song_upload_url: data.profile_song_upload_url };
+      if (profile) profile = { ...profile, profile_headline: data.profile_headline, profile_bio: data.profile_bio, profile_accent_color: data.profile_accent_color, profile_song_url: data.profile_song_url };
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to save';
     } finally {
@@ -327,6 +333,29 @@
                   placeholder="Tell the world a bit about yourself..."
                   class="mt-1 w-full rounded-md border border-input bg-background px-3 py-3 sm:py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-y min-h-[100px]"
                 />
+              </div>
+              <div class="flex flex-wrap items-end gap-2">
+                <div class="flex-1 min-w-[120px]">
+                  <label for="profile-accent" class="text-xs text-muted-foreground">Theme color</label>
+                  <p class="text-xs text-muted-foreground mt-0.5 mb-1">Leave empty to use the app's default.</p>
+                  <div class="flex gap-2 items-center mt-1">
+                    <input
+                      type="color"
+                      id="profile-accent-picker"
+                      class="h-10 w-14 rounded border border-input bg-background cursor-pointer"
+                      value={profileAccentColor && /^#[0-9A-Fa-f]{6}$/.test(profileAccentColor) ? profileAccentColor : '#c41e3a'}
+                      oninput={(e) => { profileAccentColor = (e.currentTarget as HTMLInputElement).value || ''; }}
+                    />
+                    <input
+                      id="profile-accent"
+                      type="text"
+                      bind:value={profileAccentColor}
+                      placeholder="#hex or empty"
+                      maxlength="7"
+                      class="flex-1 min-w-0 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                </div>
               </div>
               <div>
                 <p class="text-xs text-muted-foreground mb-2">Profile song</p>

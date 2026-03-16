@@ -285,6 +285,22 @@ if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
                 description = "\n".join(p for p in desc_parts if p) if desc_parts else "Brutality Cards collector"
                 profile_url = f"{base}/u/{user_id}"
                 avatar_url = profile.get("avatar_url") or ""
+                # Embed color: profile accent or app default (theme-color for Discord/social accent)
+                accent_hex = (profile.get("profile_accent_color") or "").strip()
+                if accent_hex and accent_hex.startswith("#") and len(accent_hex) in (4, 7):
+                    try:
+                        hex_part = accent_hex[1:]
+                        if len(hex_part) == 3:
+                            hex_part = "".join(c + c for c in hex_part)
+                        int(hex_part, 16)
+                        theme_color = accent_hex if len(accent_hex) == 7 else f"#{accent_hex[1]*2}{accent_hex[2]*2}{accent_hex[3]*2}"
+                    except (ValueError, IndexError):
+                        theme_color = "#c41e3a"
+                else:
+                    theme_color = "#c41e3a"
+                # Footer-like: site name (no standard OG for footer icon; favicon is in page link)
+                og_site_name = "Brutality Cards"
+                favicon_url = f"{base}/favicon.png"
                 featured_ids = profile.get("featured_card_ids") or []
                 cards = await list_collection_for_user(profile["user_id"])
                 card_by_id = {str(c["id"]): c for c in cards}
@@ -323,10 +339,13 @@ if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="theme-color" content="{_html_esc(theme_color)}">
+<link rel="icon" href="{_html_esc(favicon_url)}" type="image/png">
 <meta property="og:title" content="{_html_esc(title)}">
 <meta property="og:description" content="{_html_esc(description)}">
 <meta property="og:url" content="{_html_esc(profile_url)}">
 <meta property="og:type" content="profile">
+<meta property="og:site_name" content="{_html_esc(og_site_name)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{_html_esc(title)}">
 <meta name="twitter:description" content="{_html_esc(description)}">

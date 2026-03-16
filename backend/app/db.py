@@ -1908,9 +1908,8 @@ async def get_user_public(identifier: str) -> dict | None:
         row.get("discord_provider_avatar"),
         256,
     )
-    discord_accent = (row.get("discord_provider_accent_color") or "").strip() or None
     custom_accent = (row.get("profile_accent_color") or "").strip() or None
-    profile_accent_color = discord_accent or custom_accent
+    profile_accent_color = custom_accent
     banner_url = _discord_banner_url(
         row.get("discord_provider_user_id"),
         row.get("discord_provider_banner"),
