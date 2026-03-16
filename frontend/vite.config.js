@@ -43,7 +43,13 @@ export default defineConfig(({ mode }) => {
         // In dev, dev-dist only has sw.js and workbox-*.js (ignored), so glob would match nothing and warn
         globPatterns: mode === 'development' ? [] : ['**/*.{js,css,html,ico,png,svg,woff2}'],
         // Don't precache the document so deploy updates always get fresh HTML (correct chunk hashes)
-        globIgnores: ['**/index.html', 'index.html'],
+        globIgnores: [
+          '**/index.html',
+          'index.html',
+          // Large static assets exceed Workbox default 2 MiB; load from network when needed
+          '**/twitch-base.png',
+          '**/logos/brutality-logo2.png'
+        ],
         navigateFallback: '/',
         navigateFallbackDenylist: [/^\/api/, /^\/auth/, /^\/uploads/],
         // New SW activates immediately and removes old caches so next load gets fresh HTML
