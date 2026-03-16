@@ -4,7 +4,7 @@ from functools import lru_cache
 
 
 class Settings(BaseSettings):
-    app_title: str = "Tritone Cards API"
+    app_title: str = "Brutality Cards API"
     app_version: str = "0.1.0"
 
     # Server (public URL of this backend – used for redirect URIs and cookie secure flag)
@@ -61,8 +61,11 @@ class Settings(BaseSettings):
 
     # WebAuthn (passkeys)
     webauthn_rp_id: str = os.getenv("WEBAUTHN_RP_ID", "")  # e.g. localhost or app.example.com
-    webauthn_rp_name: str = os.getenv("WEBAUTHN_RP_NAME", "Tritone Cards")
+    webauthn_rp_name: str = os.getenv("WEBAUTHN_RP_NAME", "Brutality Cards")
     webauthn_origin: str = os.getenv("WEBAUTHN_ORIGIN", "")  # e.g. http://localhost:5175
+
+    # Optional: YouTube Data API key. When set, profile song URLs (YouTube) are validated as Music category (categoryId 10).
+    youtube_api_key: str = os.getenv("YOUTUBE_API_KEY", "")
 
     # Security: rate limiting (per IP). Set RATE_LIMIT_ENABLED=1 to enable.
     rate_limit_enabled: bool = os.getenv("RATE_LIMIT_ENABLED", "0").strip().lower() in ("1", "true", "yes")

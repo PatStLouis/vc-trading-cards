@@ -26,8 +26,8 @@ export default defineConfig(({ mode }) => {
       injectRegister: null,
       devOptions: { enabled: true },
       manifest: {
-        name: 'Tritone Cards',
-        short_name: 'Tritone Cards',
+        name: 'Brutality Cards',
+        short_name: 'Brutality Cards',
         description: "Exclusive band collectible cards — collect your favorite members and rarities as holographic cards",
         theme_color: '#0a0a0a',
         background_color: '#0a0a0a',

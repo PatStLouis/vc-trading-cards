@@ -7,7 +7,7 @@
   import { fetchApi } from '$lib/api';
 
   let { children } = $props();
-  let user: { username: string; is_admin: boolean } | null = $state(null);
+  let user: { username: string; is_admin: boolean; avatar_url?: string | null } | null = $state(null);
   let ready = $state(false);
 
   const API = import.meta.env.VITE_API_URL ?? '';
@@ -70,10 +70,14 @@
   <div class="admin-layout flex min-h-screen text-sm admin-theme">
     <aside class="admin-sidebar hidden w-56 shrink-0 sm:flex flex-col py-4">
       <div class="px-4 pb-4 flex items-center gap-2">
-        <AppIcon size="md" class="rounded-lg" />
-        <div>
-          <a href="/wallet" class="font-semibold text-white hover:text-neutral-200 transition-colors">Tritone Cards</a>
-          <span class="text-neutral-400 text-xs block mt-0.5">Admin</span>
+        {#if user.avatar_url}
+          <img src={user.avatar_url} alt="" class="w-10 h-10 rounded-lg object-cover shrink-0 border border-neutral-700" width="40" height="40" />
+        {:else}
+          <span class="w-10 h-10 rounded-lg flex items-center justify-center bg-neutral-700 text-neutral-200 text-sm font-semibold shrink-0 border border-neutral-600" aria-hidden="true">{(user.username || '?').charAt(0).toUpperCase()}</span>
+        {/if}
+        <div class="min-w-0">
+          <a href="/wallet" class="font-semibold text-white hover:text-neutral-200 transition-colors">Brutality Cards</a>
+          <span class="text-neutral-400 text-xs block mt-0.5 truncate">@{user.username}</span>
         </div>
       </div>
       <nav class="flex flex-col gap-0.5 px-3 pt-2">

@@ -1,9 +1,11 @@
 """Wallet/collection API: list credentials (trading cards) for the current user's tenant."""
 import base64
+import os
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Body
+from fastapi import APIRouter, Depends, Body, HTTPException, UploadFile, File
 from pydantic import BaseModel
+from config import get_settings
 from app.dependencies import get_current_user, get_tenant_token_for_request
 from app.schemas import (
     RESPONSE_ME,
@@ -24,9 +26,23 @@ from app.db import (
     get_user_created_at,
     get_user_created_at_raw,
     update_discord_profile_for_user,
+    get_featured_card_ids,
+    set_featured_card_ids,
+    get_profile_customization,
+    set_profile_customization,
+    set_profile_song_upload,
 )
 
 router = APIRouter(tags=["Wallet"], prefix="/api")
+
+_PROFILE_SONG_ALLOWED_TYPES = {
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/ogg": ".ogg",
+    "audio/webm": ".webm",
+    "audio/mp4": ".m4a",
+}
+_PROFILE_SONG_MAX_BYTES = 5 * 1024 * 1024  # 5MB
 
 
 def _discord_avatar_url(provider_user_id: str, avatar_hash: str | None, size: int = 128) -> str | None:
@@ -39,6 +55,11 @@ def _discord_avatar_url(provider_user_id: str, avatar_hash: str | None, size: in
 
 class UpdateProfileBody(BaseModel):
     poser_username: str | None = None
+    featured_card_ids: list[str] | None = None
+    profile_headline: str | None = None
+    profile_bio: str | None = None
+    profile_song_url: str | None = None
+    profile_accent_color: str | None = None
 
 
 @router.get("/me", responses={200: response_example(RESPONSE_ME)})
@@ -69,8 +90,11 @@ async def me(user: dict = Depends(get_current_user)):
     ]
     discord_account = next((a for a in accounts if a.get("provider") == "discord"), None)
     avatar_url = _discord_avatar_url(
-        discord_account["provider_user_id"], discord_account.get("provider_avatar")
+        (discord_account.get("provider_user_id") or ""),
+        discord_account.get("provider_avatar"),
     ) if discord_account else None
+    featured_card_ids = await get_featured_card_ids(user["user_id"])
+    profile_custom = await get_profile_customization(user["user_id"])
     return {
         "user_id": user.get("user_id"),
         "sub": user.get("sub"),
@@ -86,6 +110,8 @@ async def me(user: dict = Depends(get_current_user)):
         "accounts": accounts,
         "first_login_at": created_at,
         "is_first_login": is_first_login,
+        "featured_card_ids": featured_card_ids,
+        **profile_custom,
     }
 
 
@@ -94,7 +120,7 @@ async def update_me(
     user: dict = Depends(get_current_user),
     body: UpdateProfileBody | None = Body(default=None),
 ):
-    """Update current user profile. Only poser_username is updatable."""
+    """Update current user profile. poser_username and featured_card_ids (max 3 card IDs from own collection) are updatable."""
     if body is not None and body.poser_username is not None:
         new_poser = await set_poser_username(user["user_id"], body.poser_username)
         if new_poser is None and (body.poser_username or "").strip():
@@ -103,6 +129,22 @@ async def update_me(
                 status_code=400,
                 detail="poser_username is taken or invalid. Use 2–64 alphanumeric characters or underscores.",
             )
+    if body is not None and body.featured_card_ids is not None:
+        await set_featured_card_ids(user["user_id"], body.featured_card_ids)
+    if body is not None and any(
+        getattr(body, k) is not None
+        for k in ("profile_headline", "profile_bio", "profile_song_url", "profile_accent_color")
+    ):
+        try:
+            await set_profile_customization(
+                user["user_id"],
+                profile_headline=body.profile_headline,
+                profile_bio=body.profile_bio,
+                profile_song_url=body.profile_song_url,
+                profile_accent_color=body.profile_accent_color,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
     creds = await webauthn_list_credentials_for_user(user["user_id"])
     accounts = await get_user_accounts(user["user_id"])
     poser = await get_user_poser_username(user["user_id"])
@@ -128,8 +170,11 @@ async def update_me(
     from app.dependencies import is_admin
     discord_account = next((a for a in accounts if a.get("provider") == "discord"), None)
     avatar_url = _discord_avatar_url(
-        discord_account["provider_user_id"], discord_account.get("provider_avatar")
+        (discord_account.get("provider_user_id") or ""),
+        discord_account.get("provider_avatar"),
     ) if discord_account else None
+    featured_card_ids = await get_featured_card_ids(user["user_id"])
+    profile_custom = await get_profile_customization(user["user_id"])
     return {
         "user_id": user.get("user_id"),
         "sub": user.get("sub"),
@@ -145,7 +190,50 @@ async def update_me(
         "accounts": accounts,
         "first_login_at": created_at,
         "is_first_login": is_first_login,
+        "featured_card_ids": featured_card_ids,
+        **profile_custom,
     }
+
+
+@router.post("/me/profile-song-upload")
+async def upload_profile_song(
+    user: dict = Depends(get_current_user),
+    file: UploadFile = File(...),
+):
+    """Upload an audio file as profile song (replaces YouTube/URL). Max 5MB. Allowed: MP3, OGG, WebM, M4A."""
+    ct = (file.content_type or "").strip().lower()
+    ext = _PROFILE_SONG_ALLOWED_TYPES.get(ct)
+    if not ext:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file type. Use MP3, OGG, WebM, or M4A.",
+        )
+    content = await file.read()
+    if len(content) > _PROFILE_SONG_MAX_BYTES:
+        raise HTTPException(status_code=400, detail="File too large. Maximum 5MB.")
+    settings = get_settings()
+    upload_dir = os.path.abspath(settings.upload_dir)
+    profile_songs_dir = os.path.join(upload_dir, "profile-songs")
+    os.makedirs(profile_songs_dir, exist_ok=True)
+    user_id = user["user_id"]
+    filename = f"{user_id}{ext}"
+    path_in_upload = os.path.join(profile_songs_dir, filename)
+    try:
+        with open(path_in_upload, "wb") as f:
+            f.write(content)
+    except OSError:
+        raise HTTPException(status_code=500, detail="Failed to save file.")
+    relative_path = f"profile-songs/{filename}"
+    await set_profile_song_upload(user_id, relative_path)
+    profile_custom = await get_profile_customization(user_id)
+    return {**profile_custom}
+
+
+@router.delete("/me/profile-song")
+async def delete_profile_song(user: dict = Depends(get_current_user)):
+    """Remove uploaded profile song. Does not clear YouTube/URL profile song."""
+    await set_profile_song_upload(user["user_id"], None)
+    return await get_profile_customization(user["user_id"])
 
 
 @router.post("/me/refresh-discord", responses={200: response_example(RESPONSE_ME)})
@@ -161,7 +249,10 @@ async def refresh_discord_profile(user: dict = Depends(get_current_user)):
     bot_token = (get_settings().discord_bot_token or "").strip()
     if not bot_token:
         raise HTTPException(status_code=503, detail="Discord refresh not configured")
-    discord_user = await get_user_by_id(bot_token, discord_account["provider_user_id"])
+    provider_user_id = discord_account.get("provider_user_id") or ""
+    if not provider_user_id:
+        raise HTTPException(status_code=400, detail="Discord account missing provider_user_id")
+    discord_user = await get_user_by_id(bot_token, provider_user_id)
     if not discord_user:
         raise HTTPException(status_code=502, detail="Could not fetch profile from Discord")
     username = (discord_user.get("username") or "").strip() or discord_account.get("provider_username") or ""

@@ -3,6 +3,7 @@ import re
 import uuid
 import asyncpg
 from datetime import timezone
+from urllib.parse import urlparse, parse_qs
 from config import get_settings
 
 _settings = get_settings()
@@ -41,6 +42,13 @@ async def init_db():
                 created_at TIMESTAMPTZ DEFAULT NOW()
             )
         """)
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS featured_card_ids UUID[] DEFAULT '{}'")
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_headline TEXT")
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_bio TEXT")
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_song_url TEXT")
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_song_upload_path TEXT")
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_accent_color TEXT")
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_spotify_url TEXT")
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS user_accounts (
                 user_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
@@ -1250,18 +1258,22 @@ async def list_collection_for_user(user_id: str) -> list[dict]:
 
 
 async def search_users(q: str, limit: int = 50) -> list[dict]:
-    """Search users by username (from linked accounts). Public. Returns user_id, username, poser_username, collection_count."""
+    """Search users by username (from linked accounts). Public. One row per user; display name prefers Discord then Twitch."""
     pool = _get_pool()
     pattern = f"%{(q or '').strip()}%" if (q or '').strip() else "%"
     async with pool.acquire() as conn:
+        # One row per user: prefer Discord username, then Twitch, then any other provider
         rows = await conn.fetch(
             """
-            SELECT u.user_id, u.poser_username, ua.provider_username,
+            SELECT DISTINCT ON (u.user_id)
+                   u.user_id, u.poser_username, ua.provider_username,
                    (SELECT COUNT(*) FROM user_collection c WHERE c.user_id = u.user_id) AS collection_count
             FROM user_accounts ua
             JOIN users u ON u.user_id = ua.user_id
             WHERE ua.provider_username ILIKE $1
-            ORDER BY ua.provider_username
+            ORDER BY u.user_id,
+                     CASE ua.provider WHEN 'discord' THEN 0 WHEN 'twitch' THEN 1 ELSE 2 END,
+                     ua.provider_username
             LIMIT $2
             """,
             pattern,
@@ -1396,8 +1408,257 @@ async def resolve_user_id(identifier: str) -> str | None:
     return await get_user_by_provider("discord", s)
 
 
+async def get_featured_card_ids(user_id: str) -> list[str]:
+    """Return the user's featured card IDs (up to 3) for profile display."""
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT featured_card_ids FROM users WHERE user_id = $1::uuid",
+            user_id,
+        )
+    if not row or not row.get("featured_card_ids"):
+        return []
+    ids = row["featured_card_ids"]
+    return [str(x) for x in (ids or [])[:3]]
+
+
+def _validate_song_url(url: str | None) -> str | None:
+    """Return trimmed URL if it looks like a safe http(s) URL, else None."""
+    if not url or not (u := str(url).strip()):
+        return None
+    u = u[:2000]
+    if u.startswith("http://") or u.startswith("https://"):
+        return u
+    return None
+
+
+def _youtube_video_id(url: str) -> str | None:
+    """Extract YouTube video ID from common URL forms, or return None."""
+    if not url or not url.strip():
+        return None
+    try:
+        parsed = urlparse(url.strip())
+        netloc = (parsed.netloc or "").lower()
+        if "youtu.be" in netloc:
+            path = (parsed.path or "").strip("/")
+            if path and "/" not in path:
+                return path
+        if "youtube.com" in netloc or "www.youtube.com" in netloc:
+            if "/embed/" in parsed.path:
+                # .../embed/VIDEO_ID
+                parts = parsed.path.split("/embed/")
+                if len(parts) >= 2 and parts[1]:
+                    return parts[1].split("/")[0].split("?")[0]
+            qs = parse_qs(parsed.query)
+            v = qs.get("v", [])
+            if v and v[0]:
+                return v[0]
+    except Exception:
+        pass
+    return None
+
+
+async def _youtube_is_music(video_id: str) -> bool:
+    """
+    Return True if the video is in YouTube's Music category (categoryId 10), or if we cannot check
+    (no API key or API error). Return False only when API says category is not Music.
+    """
+    api_key = (get_settings().youtube_api_key or "").strip()
+    if not api_key:
+        return True  # Skip check when no key configured
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r = await client.get(
+                "https://www.googleapis.com/youtube/v3/videos",
+                params={"part": "snippet", "id": video_id, "key": api_key},
+            )
+        r.raise_for_status()
+        data = r.json()
+        items = data.get("items") or []
+        if not items:
+            return False  # Video not found or private
+        category_id = (items[0].get("snippet") or {}).get("categoryId")
+        # Category 10 = Music (US; commonly used)
+        return category_id == "10"
+    except Exception:
+        return True  # On error, allow the URL so we don't block users
+
+
+def _validate_spotify_url(url: str | None) -> str | None:
+    """Return trimmed URL if it is a valid Spotify link (open.spotify.com or spotify.com), else None."""
+    if not url or not (u := str(url).strip()):
+        return None
+    u = u[:500]
+    if not u.startswith("https://"):
+        return None
+    try:
+        parsed = urlparse(u)
+        host = (parsed.netloc or "").lower()
+        if "open.spotify.com" in host or host == "spotify.com":
+            return u
+    except Exception:
+        pass
+    return None
+
+
+def _discord_avatar_url(provider_user_id: str | None, provider_avatar: str | None, size: int = 128) -> str | None:
+    """Build Discord CDN avatar URL. Returns None if missing hash or user id."""
+    if not provider_avatar or not provider_user_id:
+        return None
+    ext = "gif" if (provider_avatar or "").startswith("a_") else "png"
+    return f"https://cdn.discordapp.com/avatars/{provider_user_id}/{provider_avatar}.{ext}?size={size}"
+
+
+def _profile_song_upload_url(relative_path: str | None) -> str | None:
+    """Return full URL for profile song upload, or None."""
+    if not relative_path or not (p := str(relative_path).strip()):
+        return None
+    base = (_settings.backend_url or "").rstrip("/")
+    return f"{base}/uploads/{p}" if base else None
+
+
+async def get_profile_customization(user_id: str) -> dict:
+    """Return profile_headline, profile_bio, profile_song_url, profile_song_upload_url, profile_accent_color."""
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """SELECT profile_headline, profile_bio, profile_song_url, profile_song_upload_path, profile_accent_color FROM users WHERE user_id = $1::uuid""",
+            user_id,
+        )
+    if not row:
+        return {
+            "profile_headline": None,
+            "profile_bio": None,
+            "profile_song_url": None,
+            "profile_song_upload_url": None,
+            "profile_accent_color": None,
+        }
+    upload_path = (row.get("profile_song_upload_path") or "").strip() or None
+    return {
+        "profile_headline": (row.get("profile_headline") or "").strip() or None,
+        "profile_bio": (row.get("profile_bio") or "").strip() or None,
+        "profile_song_url": _validate_song_url(row.get("profile_song_url")) if not upload_path else None,
+        "profile_song_upload_url": _profile_song_upload_url(upload_path),
+        "profile_accent_color": (row.get("profile_accent_color") or "").strip()[:20] or None,
+    }
+
+
+async def set_profile_customization(
+    user_id: str,
+    profile_headline: str | None = None,
+    profile_bio: str | None = None,
+    profile_song_url: str | None = None,
+    profile_accent_color: str | None = None,
+) -> dict:
+    """Update profile customization fields. Max lengths: headline 200, bio 5000. Returns current state."""
+    pool = _get_pool()
+    # Only update if explicitly provided (use sentinel or separate endpoint); here we allow empty string to clear
+    updates = []
+    params = []
+    n = 1
+    if profile_headline is not None:
+        h = (profile_headline or "")[:200].strip() or None
+        updates.append(f"profile_headline = ${n}")
+        params.append(h)
+        n += 1
+    if profile_bio is not None:
+        b = (profile_bio or "")[:5000].strip() or None
+        updates.append(f"profile_bio = ${n}")
+        params.append(b)
+        n += 1
+    if profile_song_url is not None:
+        raw = (profile_song_url or "").strip()
+        if not raw:
+            u = None
+        else:
+            u = _validate_song_url(profile_song_url or "")
+            if not u:
+                raise ValueError("Profile song must be a valid URL.")
+            video_id = _youtube_video_id(u)
+            if video_id:
+                if not await _youtube_is_music(video_id):
+                    raise ValueError(
+                        "Only music videos are allowed for the profile song. This video is not in the Music category."
+                    )
+            elif _validate_spotify_url(u):
+                pass  # Spotify URL allowed
+            # else: direct audio URL (any https), allowed
+        updates.append(f"profile_song_url = ${n}")
+        params.append(u)
+        n += 1
+        updates.append(f"profile_song_upload_path = ${n}")
+        params.append(None)
+        n += 1
+    if profile_accent_color is not None:
+        c = (profile_accent_color or "").strip()[:20] or None
+        if c and not re.match(r"^#[0-9A-Fa-f]{3,6}$", c) and not re.match(r"^[a-zA-Z]+$", c):
+            c = None  # allow hex or CSS color names
+        updates.append(f"profile_accent_color = ${n}")
+        params.append(c)
+        n += 1
+    if updates:
+        params.append(user_id)
+        async with pool.acquire() as conn:
+            await conn.execute(
+                f"UPDATE users SET {', '.join(updates)} WHERE user_id = ${n}::uuid",
+                *params,
+            )
+    return await get_profile_customization(user_id)
+
+
+async def set_profile_song_upload(user_id: str, relative_path: str | None) -> dict:
+    """Set or clear profile_song_upload_path. Clears profile_song_url when setting upload. Returns current profile customization."""
+    pool = _get_pool()
+    p = (relative_path or "").strip() or None
+    if p and not p.startswith("profile-songs/"):
+        raise ValueError("Invalid profile song upload path.")
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE users SET profile_song_upload_path = $1, profile_song_url = NULL WHERE user_id = $2::uuid",
+            p,
+            user_id,
+        )
+    return await get_profile_customization(user_id)
+
+
+async def get_profile_song_upload_path(user_id: str) -> str | None:
+    """Return profile_song_upload_path for user, or None."""
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT profile_song_upload_path FROM users WHERE user_id = $1::uuid",
+            user_id,
+        )
+    if not row:
+        return None
+    return (row.get("profile_song_upload_path") or "").strip() or None
+
+
+async def set_featured_card_ids(user_id: str, card_ids: list[str]) -> list[str]:
+    """Set featured card IDs for profile (max 3). Validates each card is in the user's collection. Returns the saved list."""
+    card_ids = [c.strip() for c in (card_ids or []) if c and str(c).strip()][:3]
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        # Ensure all card_ids belong to this user's collection
+        if card_ids:
+            owned = await conn.fetch(
+                "SELECT card_id FROM user_collection WHERE user_id = $1::uuid AND card_id = ANY($2::uuid[])",
+                user_id,
+                card_ids,
+            )
+            owned_ids = {str(r["card_id"]) for r in owned}
+            card_ids = [c for c in card_ids if c in owned_ids]
+        await conn.execute(
+            "UPDATE users SET featured_card_ids = $1::uuid[] WHERE user_id = $2::uuid",
+            card_ids,
+            user_id,
+        )
+    return card_ids
+
+
 async def get_user_public(identifier: str) -> dict | None:
-    """Get public user profile by user_id or discord_sub. Returns user_id, username, poser_username, collection_count."""
+    """Get public user profile by user_id or discord_sub. Returns user_id, username, poser_username, collection_count, featured_card_ids."""
     user_id = await resolve_user_id(identifier)
     if not user_id:
         return None
@@ -1405,8 +1666,11 @@ async def get_user_public(identifier: str) -> dict | None:
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
-            SELECT u.user_id, u.poser_username,
+            SELECT u.user_id, u.poser_username, u.featured_card_ids,
+                   u.profile_headline, u.profile_bio, u.profile_song_url, u.profile_song_upload_path, u.profile_accent_color,
                    (SELECT ua.provider_username FROM user_accounts ua WHERE ua.user_id = u.user_id AND ua.provider = 'discord' LIMIT 1) AS username,
+                   (SELECT ua.provider_user_id FROM user_accounts ua WHERE ua.user_id = u.user_id AND ua.provider = 'discord' LIMIT 1) AS discord_provider_user_id,
+                   (SELECT ua.provider_avatar FROM user_accounts ua WHERE ua.user_id = u.user_id AND ua.provider = 'discord' LIMIT 1) AS discord_provider_avatar,
                    (SELECT COUNT(*) FROM user_collection c WHERE c.user_id = u.user_id) AS collection_count
             FROM users u WHERE u.user_id = $1::uuid
             """,
@@ -1414,12 +1678,26 @@ async def get_user_public(identifier: str) -> dict | None:
         )
     if not row:
         return None
+    featured = row.get("featured_card_ids") or []
+    upload_path = (row.get("profile_song_upload_path") or "").strip() or None
+    avatar_url = _discord_avatar_url(
+        row.get("discord_provider_user_id"),
+        row.get("discord_provider_avatar"),
+        256,
+    )
     return {
         "user_id": str(row["user_id"]),
-        "discord_sub": None,  # backward compat: frontend may expect this; we use user_id now
+        "discord_sub": None,
         "username": row["username"] or row["poser_username"] or str(row["user_id"]),
         "poser_username": row["poser_username"],
+        "avatar_url": avatar_url,
         "collection_count": row["collection_count"] or 0,
+        "featured_card_ids": [str(x) for x in featured[:3]],
+        "profile_headline": (row.get("profile_headline") or "").strip() or None,
+        "profile_bio": (row.get("profile_bio") or "").strip() or None,
+        "profile_song_url": None if upload_path else ((row.get("profile_song_url") or "").strip() or None),
+        "profile_song_upload_url": _profile_song_upload_url(upload_path),
+        "profile_accent_color": (row.get("profile_accent_color") or "").strip() or None,
     }
 
 

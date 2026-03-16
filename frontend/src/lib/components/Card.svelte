@@ -13,6 +13,10 @@
   export let rarity = 'common';
   export let img = '';
   export let back = '/card-back.svg';
+  /** When true, disables tilt/glare on hover (e.g. grid view with many cards) to avoid animating many at once. */
+  export let noTilt = false;
+  /** When true, clicking the card does not expand/pop it (e.g. catalogue view where selection opens a detail panel instead). */
+  export let noPop = false;
 
   $: typesStr = Array.isArray(types) ? (types[0] ?? 'fighting') : (types || 'fighting');
   $: numberStr = String(number ?? '');
@@ -42,8 +46,8 @@
   let firstPop = true;
   let isVisible = true;
 
-  const springOpts = { stiffness: 0.066, damping: 0.25 };
-  const springPop = { stiffness: 0.033, damping: 0.45 };
+  const springOpts = { stiffness: 0.08, damping: 0.42 };
+  const springPop = { stiffness: 0.05, damping: 0.58 };
   const springRotate = spring({ x: 0, y: 0 }, springOpts);
   const springGlare = spring({ x: 50, y: 50, o: 0 }, springOpts);
   const springBackground = spring({ x: 50, y: 50 }, springOpts);
@@ -72,17 +76,18 @@
     const absolute = { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
     const percent = { x: clamp(round((100 / rect.width) * absolute.x), 0, 100), y: clamp(round((100 / rect.height) * absolute.y), 0, 100) };
     const center = { x: percent.x - 50, y: percent.y - 50 };
+    const rotate = noTilt ? { x: 0, y: 0 } : { x: round(-(center.x / 5)), y: round(center.y / 2.5) };
     updateSprings(
       { x: adjust(percent.x, 0, 100, 37, 63), y: adjust(percent.y, 0, 100, 33, 67) },
-      { x: round(-(center.x / 3.5)), y: round(center.y / 2) },
-      { x: round(percent.x), y: round(percent.y), o: 1 }
+      rotate,
+      { x: round(percent.x), y: round(percent.y), o: 0.85 }
     );
   }
 
-  function interactEnd(delay = 500) {
+  function interactEnd(delay = 120) {
     setTimeout(() => {
       interacting = false;
-      const s = 0.01, d = 0.06;
+      const s = 0.2, d = 0.55;
       springRotate.stiffness = s; springRotate.damping = d; springRotate.set({ x: 0, y: 0 }, { soft: true });
       springGlare.stiffness = s; springGlare.damping = d; springGlare.set({ x: 50, y: 50, o: 0 }, { soft: true });
       springBackground.stiffness = s; springBackground.damping = d; springBackground.set({ x: 50, y: 50 }, { soft: true });
@@ -97,6 +102,7 @@
   }
 
   function activate() {
+    if (noPop) return;
     if ($activeCard === thisCard) {
       activeCard.set(null);
       retreat();
@@ -104,15 +110,12 @@
     }
     activeCard.set(thisCard);
     active = true;
-    setCenter();
+    springTranslate.set({ x: 0, y: 0 });
     const rect = thisCard.getBoundingClientRect();
     const scaleW = (window.innerWidth / rect.width) * 0.9;
     const scaleH = (window.innerHeight / rect.height) * 0.9;
-    if (firstPop) {
-      springRotateDelta.set({ x: 360, y: 0 });
-      firstPop = false;
-    }
-    springScale.set(Math.min(scaleW, scaleH, 1.75));
+    if (firstPop) firstPop = false;
+    springScale.set(Math.min(scaleW, scaleH, 1.45));
     interactEnd(100);
   }
 
@@ -126,15 +129,15 @@
 
   export { retreat };
 
-  $: if ($activeCard === thisCard) {
+  $: if (!noPop && $activeCard === thisCard) {
     if (!active) {
       active = true;
-      setCenter();
+      springTranslate.set({ x: 0, y: 0 });
       const rect = thisCard?.getBoundingClientRect();
       if (rect) {
         const scaleW = (window.innerWidth / rect.width) * 0.9;
         const scaleH = (window.innerHeight / rect.height) * 0.9;
-        springScale.set(Math.min(scaleW, scaleH, 1.75));
+        springScale.set(Math.min(scaleW, scaleH, 1.45));
       }
       interactEnd(100);
     }
@@ -142,13 +145,15 @@
     retreat();
   }
 
+  /** When noTilt and not hovering: static holo (0.55). When noTilt and hovering: follow cursor. Otherwise use spring. */
+  $: effectiveCardOpacity = noTilt ? (interacting ? $springGlare.o : 0.55) : $springGlare.o;
   $: dynamicStyles = `
     --pointer-x: ${$springGlare.x}%;
     --pointer-y: ${$springGlare.y}%;
     --pointer-from-center: ${$springGlare ? clamp(Math.sqrt(($springGlare.x - 50) ** 2 + ($springGlare.y - 50) ** 2) / 50, 0, 1) : 0};
     --pointer-from-top: ${$springGlare.y / 100};
     --pointer-from-left: ${$springGlare.x / 100};
-    --card-opacity: ${$springGlare.o};
+    --card-opacity: ${effectiveCardOpacity};
     --rotate-x: ${$springRotate.x + $springRotateDelta.x}deg;
     --rotate-y: ${$springRotate.y + $springRotateDelta.y}deg;
     --background-x: ${$springBackground.x}%;

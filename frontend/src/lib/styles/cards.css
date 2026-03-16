@@ -108,12 +108,21 @@
   contain: layout style;
 }
 
+/* Expanded card: fixed overlay so it isn’t clipped by section/scroll overflow */
 .card.active {
   z-index: 999999 !important;
   will-change: transform;
   contain: layout style;
   isolation: isolate;
-  position: relative;
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.card.active .card__translater {
+  pointer-events: auto;
 }
 
 .card.active .card__translater,

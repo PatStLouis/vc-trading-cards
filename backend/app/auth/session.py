@@ -50,6 +50,7 @@ def session_cookie_kwargs(token: str) -> dict[str, Any]:
         "value": token,
         "max_age": s.session_ttl_seconds,
         "httponly": True,
+        "path": "/",
     }
     if s.cross_origin_deploy and s.backend_url.strip().lower().startswith("https"):
         kwargs["samesite"] = "none"

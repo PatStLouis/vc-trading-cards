@@ -12,7 +12,7 @@
 
 <img
   src={APP_ICON_URL}
-  alt="Tritone Cards"
+  alt="Brutality Cards"
   class="shrink-0 rounded-lg object-contain {sizeClasses[size]} {className}"
   width={size === 'sm' ? 24 : size === 'md' ? 32 : 40}
   height={size === 'sm' ? 24 : size === 'md' ? 32 : 40}

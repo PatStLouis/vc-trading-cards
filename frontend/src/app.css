@@ -1,6 +1,15 @@
 @import "tailwindcss";
 
-/* Brutal deathcore theme – red, black, heavy type */
+/* Theme font: Brutality / IMS – OldNewspaperTypes from theme pack */
+@font-face {
+  font-family: 'OldNewspaperTypes';
+  src: url('/font/OldNewspaperTypes.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Brutality / newspaper theme – red, black, editorial type */
 @theme inline {
   --color-background: oklch(0.09 0.015 25);
   --color-foreground: oklch(0.96 0.01 25);
@@ -23,9 +32,9 @@
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
   --radius-xl: 0.75rem;
-  --font-display: 'Bebas Neue', 'Oswald', system-ui, sans-serif;
-  --font-heading: 'Oswald', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-display: 'OldNewspaperTypes', 'Bebas Neue', system-ui, sans-serif;
+  --font-heading: 'OldNewspaperTypes', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', monospace;
 }
 
 * {
@@ -68,9 +77,39 @@ a {
 a:hover {
   text-decoration: underline;
 }
+/* Buttons rendered as links (e.g. Explore catalogue) should not underline on hover */
+a[data-slot="button"]:hover {
+  text-decoration: none;
+}
 
 main {
   max-width: 1200px;
   margin: 0 auto;
   padding: 1rem;
 }
+
+/* App shell – wallet, account, profile, catalogue (unified mobile app layout) */
+.app-page {
+  font-family: var(--font-heading);
+}
+.app-page__bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 70% 40% at 50% 0%, oklch(0.22 0.08 25 / 0.45), transparent 60%);
+  pointer-events: none;
+}
+
+/* BP / Brutality Podcast texture – full viewport (landing + wallet) */
+.texture-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: url('/texture.jpg');
+  background-size: cover;
+  background-position: center;
+  opacity: 0.38;
+}
+

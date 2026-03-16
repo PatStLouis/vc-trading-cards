@@ -14,7 +14,7 @@
 </script>
 
 <svelte:head>
-  <title>Tritone Cards — Exclusive band collectible cards</title>
+  <title>Brutality Cards — Exclusive band collectible cards</title>
   <link rel="icon" href={APP_ICON_URL} />
 </svelte:head>
 

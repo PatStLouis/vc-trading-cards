@@ -1,4 +1,4 @@
-# Tritone Cards API
+# Brutality Cards API
 
 FastAPI backend: Discord/Twitch OAuth, ACA-Py multitenancy, admin (cards, ledger), wallet, image analysis (OCR).
 

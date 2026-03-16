@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Register Discord slash commands for Tritone Cards bot.
+Register Discord slash commands for Brutality Cards bot.
 Run once after setting DISCORD_CLIENT_ID and DISCORD_BOT_TOKEN.
 
   cd backend && uv run python scripts/register_discord_commands.py
@@ -27,12 +27,12 @@ URL = f"https://discord.com/api/v10/applications/{APPLICATION_ID}/commands"
 COMMANDS = [
     {
         "name": "wallet",
-        "description": "Open your Tritone Cards deck (The Devil's Interval Collectible Cards)",
+        "description": "Open your Brutality Cards deck (The Devil's Interval Collectible Cards)",
         "type": 1,
     },
     {
         "name": "collection",
-        "description": "View your Tritone Cards collection",
+        "description": "View your Brutality Cards collection",
         "type": 1,
     },
 ]

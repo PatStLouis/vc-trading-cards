@@ -5,13 +5,13 @@
   import * as Card from '$lib/components/ui/card';
   import { Skeleton } from '$lib/components/ui/skeleton';
   import TradingCard from '$lib/components/Card.svelte';
-  import AppIcon from '$lib/components/AppIcon.svelte';
+  import AppHeader from '$lib/components/AppHeader.svelte';
   import { activeCard } from '$lib/stores/activeCard';
   import { fetchApi, apiUrl } from '$lib/api';
   import { page } from '$app/stores';
 
   type SetInfo = { id: string; name: string; card_back_path?: string };
-  let user: { username: string; wallet_id: string; is_admin?: boolean } | null = $state(null);
+  let user: { username: string; wallet_id: string; is_admin?: boolean; avatar_url?: string | null } | null = $state(null);
   let cards: Array<Record<string, unknown>> = $state([]);
   let sets: SetInfo[] = $state([]);
   let loading = $state(true);
@@ -46,6 +46,13 @@
   }
 
   onMount(async () => {
+    try {
+      const raw = localStorage.getItem(GRID_SETS_KEY);
+      if (raw) {
+        const arr = JSON.parse(raw) as string[];
+        if (Array.isArray(arr)) gridModeForSet = new Set(arr);
+      }
+    } catch (_) {}
     try {
       const [meRes, credsRes, setsRes] = await Promise.all([
         fetchApi('/api/me', { auth: true }),
@@ -105,12 +112,7 @@
     }
   });
 
-  async function logout() {
-    await fetchApi('/auth/logout', { method: 'POST', auth: true });
-    goto('/');
-  }
-
-  // Group cards by set for row layout; preserve order of first appearance
+  // Group cards by set; preserve order of first appearance
   const cardsBySet = $derived.by(() => {
     const groups = new Map<string, Array<Record<string, unknown>>>();
     const order: string[] = [];
@@ -124,45 +126,28 @@
     }
     return order.map((set) => ({ set, items: groups.get(set)! }));
   });
+
+  // Per-set view mode: sets in this Set show as grid; others show as horizontal row (persisted)
+  const GRID_SETS_KEY = 'wallet-grid-sets';
+  let gridModeForSet = $state<Set<string>>(new Set());
+
+  function toggleSetView(setName: string) {
+    gridModeForSet = new Set(gridModeForSet);
+    if (gridModeForSet.has(setName)) gridModeForSet.delete(setName);
+    else gridModeForSet.add(setName);
+    try {
+      localStorage.setItem(GRID_SETS_KEY, JSON.stringify([...gridModeForSet]));
+    } catch (_) {}
+  }
 </script>
 
-<main class="wallet-page py-8 px-4 md:py-10 relative">
-  <div class="wallet-page__bg" aria-hidden="true"></div>
+<main class="app-page py-8 px-4 md:py-10 relative">
+  <div class="app-page__bg" aria-hidden="true"></div>
+  <div class="texture-overlay" aria-hidden="true"></div>
 
   <div class="relative z-10">
-    <!-- Header -->
-    <header class="wallet-header mb-8 md:mb-10">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div class="flex items-center gap-3">
-          <AppIcon size="lg" class="rounded-xl" />
-          <div>
-            <h1 class="wallet-header__title font-display text-3xl md:text-4xl tracking-tight uppercase">
-              My deck
-            </h1>
-          <p class="wallet-header__tagline text-muted-foreground/80 text-xs mt-0.5">Your deck · Exclusive band collectibles</p>
-          {#if user}
-            <p class="wallet-header__meta text-muted-foreground text-sm mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              <span>@{user.username}</span>
-              <span class="wallet-header__wallet-id font-mono text-xs opacity-80" aria-label="Wallet ID">
-                {user.wallet_id?.slice(0, 14)}…
-              </span>
-            </p>
-          {/if}
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          {#if user}
-            <Button variant="ghost" size="sm" href="/search">Explore</Button>
-            <Button variant="outline" size="sm" href="/wallet/profile">Profile</Button>
-            <Button variant="outline" size="sm" href="/wallet/account">Account</Button>
-            {#if user.is_admin}
-              <Button variant="outline" size="sm" href="/admin">Admin</Button>
-            {/if}
-            <Button variant="outline" size="sm" onclick={logout}>Log out</Button>
-          {/if}
-        </div>
-      </div>
-      {#if showAdminRequiredNotice}
+    <AppHeader title="My deck" {user} showExploreButton={false} />
+    {#if showAdminRequiredNotice}
         <div class="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 flex items-start gap-3">
           <p class="text-amber-200 text-sm flex-1">
             Admin access is only available to users listed in <code class="font-mono text-xs bg-black/20 px-1 rounded">ADMIN_DISCORD_IDS</code> in the backend <code class="font-mono text-xs bg-black/20 px-1 rounded">.env</code>. Add your Discord user ID there (comma-separated for multiple admins), then restart the backend and log in again.
@@ -170,15 +155,14 @@
           <Button variant="ghost" size="sm" class="shrink-0 text-amber-300 hover:text-amber-200" onclick={() => { dismissAdminNotice = true; goto('/wallet', { replaceState: true }); }} aria-label="Dismiss">×</Button>
         </div>
       {/if}
-      {#if !loading && !error && cards.length >= 0}
-        <div class="wallet-header__stat mt-4 flex flex-wrap items-center gap-2">
-          <div class="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-4 py-1.5 text-sm font-medium">
-            <span class="wallet-header__stat-dot" aria-hidden="true"></span>
-            {cards.length} {cards.length === 1 ? 'card' : 'cards'}
-          </div>
+    {#if !loading && !error && cards.length >= 0}
+      <div class="wallet-header__stat mt-4 flex flex-wrap items-center gap-2">
+        <div class="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-4 py-1.5 text-sm font-medium">
+          <span class="wallet-header__stat-dot" aria-hidden="true"></span>
+          {cards.length} {cards.length === 1 ? 'card' : 'cards'}
         </div>
-      {/if}
-    </header>
+      </div>
+    {/if}
 
     {#if loading}
       <div class="space-y-6">
@@ -206,32 +190,78 @@
         <Card.Header class="p-0">
         <Card.Title class="text-xl font-semibold">No cards yet</Card.Title>
         <Card.Description class="text-muted-foreground mt-3 max-w-md mx-auto leading-relaxed">
-          Cards you collect will show up here as holographic Tritone cards. Get your first card to start building your deck.
+          Collect cards to build your deck. Get your first card to get started.
         </Card.Description>
         </Card.Header>
       </Card.Root>
     {:else}
-      <div class="wallet-rows space-y-8" aria-label="Collectible cards by set">
+      <div class="wallet-rows space-y-8 overflow-visible" aria-label="Collectible cards by set">
         {#each cardsBySet as { set: setName, items: setCards }}
-          <section class="wallet-row" aria-label="{setName}">
-            <h2 class="wallet-row__title text-lg font-semibold text-foreground mb-3 px-1">{setName}</h2>
-            <div class="wallet-row__scroll flex gap-6 overflow-x-auto overflow-y-hidden pb-2 -mx-1 px-1">
-              {#each setCards as card (card.id)}
-                <div class="wallet-row__card flex-shrink-0 w-[min(280px,75vw)] max-w-[280px]">
-                  <TradingCard
-                    id={card.id}
-                    name={String(card.name ?? 'Card')}
-                    number={String(card.number ?? '')}
-                    set={String(card.set ?? '')}
-                    types={Array.isArray(card.types) ? card.types : [card.types].filter(Boolean)}
-                    subtypes={String(card.subtypes ?? 'trading-cards')}
-                    supertype={String(card.supertype ?? 'trading-card')}
-                    rarity={String(card.rarity ?? 'common')}
-                    img={cardImageUrl(card)}
-                    back={backUrlForSetName(String(card.set ?? ''))}
-                  />
+          {@const isGrid = gridModeForSet.has(setName)}
+          <section class="wallet-set overflow-visible" aria-label="{setName}" class:wallet-set--grid={isGrid}>
+            <div class="wallet-set__header flex items-center justify-between gap-2 mb-3 px-1">
+              <h2 class="wallet-row__title font-display text-lg font-semibold text-foreground tracking-wide">{setName}</h2>
+              <button
+                type="button"
+                class="wallet-set__toggle rounded-lg p-2 text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+                aria-label={isGrid ? 'Show as scrolling row' : 'Show as grid'}
+                title={isGrid ? 'Row view' : 'Grid view'}
+                onclick={() => toggleSetView(setName)}
+              >
+                {#if isGrid}
+                  <!-- Row icon: horizontal scroll -->
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                {:else}
+                  <!-- Grid icon -->
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                  </svg>
+                {/if}
+              </button>
+            </div>
+            <div class="wallet-set__content transition-[opacity,transform] duration-300 ease-out">
+              {#if isGrid}
+                <div class="wallet-set__grid grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+                  {#each setCards as card (card.id)}
+                    <div class="wallet-set__grid-card flex justify-center">
+                      <TradingCard
+                        noTilt={true}
+                        id={card.id}
+                        name={String(card.name ?? 'Card')}
+                        number={String(card.number ?? '')}
+                        set={String(card.set ?? '')}
+                        types={Array.isArray(card.types) ? card.types : [card.types].filter(Boolean)}
+                        subtypes={String(card.subtypes ?? 'trading-cards')}
+                        supertype={String(card.supertype ?? 'trading-card')}
+                        rarity={String(card.rarity ?? 'common')}
+                        img={cardImageUrl(card)}
+                        back={backUrlForSetName(String(card.set ?? ''))}
+                      />
+                    </div>
+                  {/each}
                 </div>
-              {/each}
+              {:else}
+                <div class="wallet-row__scroll flex gap-6 overflow-x-auto overflow-y-visible pb-2 -mx-1 px-1">
+                  {#each setCards as card (card.id)}
+                    <div class="wallet-row__card flex-shrink-0 w-[min(240px,68vw)] max-w-[240px]">
+                      <TradingCard
+                        id={card.id}
+                        name={String(card.name ?? 'Card')}
+                        number={String(card.number ?? '')}
+                        set={String(card.set ?? '')}
+                        types={Array.isArray(card.types) ? card.types : [card.types].filter(Boolean)}
+                        subtypes={String(card.subtypes ?? 'trading-cards')}
+                        supertype={String(card.supertype ?? 'trading-card')}
+                        rarity={String(card.rarity ?? 'common')}
+                        img={cardImageUrl(card)}
+                        back={backUrlForSetName(String(card.set ?? ''))}
+                      />
+                    </div>
+                  {/each}
+                </div>
+              {/if}
             </div>
           </section>
         {/each}
@@ -241,26 +271,6 @@
 </main>
 
 <style>
-  .wallet-page {
-    font-family: var(--font-heading);
-  }
-
-  .wallet-page__bg {
-    position: absolute;
-    inset: 0;
-    background:
-      radial-gradient(ellipse 70% 40% at 50% 0%, oklch(0.22 0.08 25 / 0.45), transparent 60%);
-    pointer-events: none;
-  }
-
-  .wallet-header__title {
-    font-family: var(--font-display);
-  }
-
-  .wallet-header__wallet-id {
-    font-family: var(--font-mono);
-  }
-
   .wallet-header__stat-dot {
     width: 6px;
     height: 6px;
@@ -276,6 +286,7 @@
   .wallet-row__scroll {
     scroll-snap-type: x proximity;
     -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
   }
   .wallet-row__scroll::-webkit-scrollbar {
     height: 6px;
@@ -292,5 +303,21 @@
   }
   .wallet-row__card {
     scroll-snap-align: start;
+  }
+
+  /* Grid: limit card size so they don’t grow too large */
+  .wallet-set__grid-card {
+    max-width: 140px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  @media (min-width: 640px) {
+    .wallet-set__grid-card { max-width: 150px; }
+  }
+  @media (min-width: 768px) {
+    .wallet-set__grid-card { max-width: 160px; }
+  }
+  @media (min-width: 1024px) {
+    .wallet-set__grid-card { max-width: 150px; }
   }
 </style>

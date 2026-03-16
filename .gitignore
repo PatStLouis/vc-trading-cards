@@ -19,6 +19,9 @@ frontend/dev-dist/
 # Root sets directory only (leading slash = repo root)
 /sets/
 
+# Theme assets (large zips/twitch-assets); app uses frontend/static/logos, font, texture, twitch-base
+/theme/
+
 # IDE / OS
 .idea/
 .vscode/

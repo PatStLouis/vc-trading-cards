@@ -2,8 +2,8 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { Button } from '$lib/components/ui/button';
-  import AppIcon from '$lib/components/AppIcon.svelte';
-  import { apiUrl, fetchApi, poserDidUrl } from '$lib/api';
+  import AppHeader from '$lib/components/AppHeader.svelte';
+  import { apiUrl, fetchApi } from '$lib/api';
   import { registerPasskey, isWebAuthnAvailable } from '$lib/webauthn';
 
   type LinkedAccount = {
@@ -17,7 +17,6 @@
     username: string;
     wallet_id: string;
     provider?: string;
-    poser_username?: string | null;
     avatar_url?: string | null;
     accounts?: LinkedAccount[];
     has_passkey?: boolean;
@@ -39,9 +38,6 @@
   let passkeyAdding = $state(false);
   let passkeyMessage = $state('');
   let passkeyRemoving = $state<string | null>(null);
-  let poserInput = $state('');
-  let poserSaving = $state(false);
-  let poserError = $state('');
   let discordRefreshing = $state(false);
   let discordRefreshError = $state('');
 
@@ -58,7 +54,6 @@
       }
       if (!res.ok) throw new Error('Failed to load account');
       user = await res.json();
-      poserInput = user?.poser_username ?? '';
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load';
       user = null;
@@ -107,40 +102,6 @@
       passkeyMessage = 'Failed to remove passkey';
     } finally {
       passkeyRemoving = null;
-    }
-  }
-
-  async function savePoser() {
-    if (!user || poserSaving) return;
-    poserError = '';
-    const raw = (poserInput || '').trim();
-    if (!raw) {
-      poserError = 'Enter a poser username (2–64 characters, letters, numbers, underscores).';
-      return;
-    }
-    if (raw.length < 2 || raw.length > 64) {
-      poserError = 'Poser username must be 2–64 characters.';
-      return;
-    }
-    poserSaving = true;
-    try {
-      const res = await fetchApi('/api/me', {
-        method: 'PATCH',
-        auth: true,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ poser_username: raw }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        poserError = data.detail || res.statusText || 'Failed to update';
-        return;
-      }
-      user = { ...user, poser_username: data.poser_username ?? raw };
-      poserInput = user.poser_username ?? '';
-    } catch (e) {
-      poserError = e instanceof Error ? e.message : 'Failed to update';
-    } finally {
-      poserSaving = false;
     }
   }
 
@@ -230,26 +191,15 @@
 </script>
 
 <svelte:head>
-  <title>Account · Tritone Cards</title>
+  <title>Account · Brutality Cards</title>
 </svelte:head>
 
-<div class="account-page py-5 px-4 relative">
-  <div class="account-page__bg absolute inset-0 -z-10 bg-background/95" aria-hidden="true"></div>
+<div class="app-page py-8 px-4 md:py-10 relative">
+  <div class="app-page__bg" aria-hidden="true"></div>
+  <div class="texture-overlay" aria-hidden="true"></div>
 
   <div class="relative z-10 max-w-xl mx-auto space-y-4">
-    <header class="flex items-center justify-between gap-3">
-      <div class="flex items-center gap-2 min-w-0">
-        <a href="/wallet" class="shrink-0 rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors" aria-label="Back to deck">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
-        </a>
-        <AppIcon size="sm" class="rounded-md shrink-0 hidden sm:block" />
-        <h1 class="font-display text-xl sm:text-2xl tracking-tight uppercase truncate">Account</h1>
-      </div>
-      <div class="flex items-center gap-1 shrink-0">
-        <Button variant="ghost" size="sm" href="/wallet/profile">Profile</Button>
-        <Button variant="ghost" size="sm" href="/wallet">My deck</Button>
-      </div>
-    </header>
+    <AppHeader title="Account" {user} showExploreButton={false} />
 
     {#if loading}
       <div class="rounded-xl border border-border/80 bg-card/50 py-8 text-center text-sm text-muted-foreground">Loading…</div>
@@ -416,47 +366,7 @@
           {/if}
         </div>
       </section>
-
-      <!-- Poser Username -->
-      <section class="rounded-xl border border-border/80 bg-card/50 overflow-hidden">
-        <div class="px-4 py-2.5 border-b border-border/60">
-          <h2 class="text-sm font-semibold text-foreground">Poser username</h2>
-          <p class="text-xs text-muted-foreground mt-0.5">2–64 characters, letters, numbers, underscores. This appears on your public profile.</p>
-        </div>
-        <div class="p-3 space-y-2">
-          <div class="flex flex-wrap items-center gap-2">
-            <input
-              type="text"
-              bind:value={poserInput}
-              placeholder="e.g. my_cool_id"
-              class="flex-1 min-w-[140px] h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0"
-              maxlength="64"
-            />
-            <Button size="sm" class="h-8 text-xs shrink-0" onclick={savePoser} disabled={poserSaving}>
-              {poserSaving ? 'Saving…' : 'Save'}
-            </Button>
-          </div>
-          {#if poserError}
-            <p class="text-xs text-destructive">{poserError}</p>
-          {/if}
-          {#if user.poser_username}
-            <a
-              href={poserDidUrl(user.poser_username)}
-              target="_blank"
-              rel="noopener noreferrer"
-              class="text-xs text-primary hover:no-underline font-mono"
-            >
-              /poser/{user.poser_username}
-            </a>
-          {/if}
-        </div>
-      </section>
     {/if}
   </div>
 </div>
 
-<style>
-  .account-page__bg {
-    min-height: 100vh;
-  }
-</style>

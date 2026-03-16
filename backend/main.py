@@ -1,14 +1,17 @@
 from contextlib import asynccontextmanager
+import base64
+import io
 import logging
 import os
 
+import qrcode
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 
 from config import get_settings
-from app.db import init_db, close_db
+from app.db import init_db, close_db, get_user_public, list_collection_for_user
 from app.auth import get_router as get_auth_router
 from app.admin import router as admin_router, discord_router as admin_discord_router
 from app.wallet import router as wallet_router
@@ -107,6 +110,97 @@ if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
                 return FileResponse(p, media_type="application/javascript", headers=_no_cache_headers_sw)
             return JSONResponse(status_code=404, content={"detail": "Not Found"})
 
+        def _html_esc(s: str) -> str:
+            if not s:
+                return ""
+            return (
+                str(s)
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace('"', "&quot;")
+            )
+
+        def _is_embed_crawler(user_agent: str) -> bool:
+            ua = (user_agent or "").lower()
+            return (
+                "discord" in ua
+                or "facebookexternalhit" in ua
+                or "twitterbot" in ua
+                or "telegrambot" in ua
+                or "slackbot" in ua
+                or "whatsapp" in ua
+                or "linkedinbot" in ua
+            )
+
+        @app.get("/u/{user_id}", response_class=HTMLResponse)
+        async def _profile_embed(request: Request, user_id: str):
+            if _is_embed_crawler(request.headers.get("user-agent", "")):
+                profile = await get_user_public(user_id)
+                if not profile:
+                    from fastapi import HTTPException
+                    raise HTTPException(status_code=404, detail="User not found")
+                base = (request.base_url or "").rstrip("/")
+                api_base = settings.backend_url.rstrip("/")
+                title = profile.get("profile_headline") or profile.get("username") or profile.get("poser_username") or "Brutality Cards"
+                desc_parts = []
+                if profile.get("username") or profile.get("poser_username"):
+                    desc_parts.append(f"@{profile.get('username') or profile.get('poser_username')}")
+                if profile.get("profile_headline") and profile.get("profile_headline") != title:
+                    desc_parts.append(profile["profile_headline"])
+                if profile.get("profile_bio"):
+                    bio = (profile["profile_bio"] or "")[:200].strip().replace("\n", " ")
+                    if len((profile["profile_bio"] or "")) > 200:
+                        bio += "…"
+                    desc_parts.append(bio)
+                desc_parts.append(f"{profile.get('collection_count') or 0} cards in collection")
+                description = " · ".join(desc_parts) if desc_parts else "Brutality Cards collector"
+                description = description.replace("\n", " ").strip()
+                profile_url = f"{base}/u/{user_id}"
+                avatar_url = profile.get("avatar_url") or ""
+                featured_ids = profile.get("featured_card_ids") or []
+                cards = await list_collection_for_user(profile["user_id"])
+                card_by_id = {str(c["id"]): c for c in cards}
+                featured_cards = [card_by_id[cid] for cid in featured_ids if cid in card_by_id][:3]
+                def card_image_url(c):
+                    path = (c.get("artwork") or c.get("image_path") or "").strip()
+                    if not path:
+                        return ""
+                    if path.startswith("http"):
+                        return path
+                    return f"{api_base}/uploads/{path}" if not path.startswith("/") else f"{api_base}{path}"
+                card_images = [card_image_url(c) for c in featured_cards if card_image_url(c)]
+                og_image = avatar_url or (card_images[0] if card_images else "")
+                meta_images = [og_image] + [u for u in card_images if u != og_image][:3]
+                meta_image_tags = "".join(
+                    f'<meta property="og:image" content="{_html_esc(u)}">' for u in meta_images if u
+                )
+                qr_buf = io.BytesIO()
+                qrcode.make(profile_url, version=1, box_size=4, border=2).save(qr_buf, format="PNG")
+                qr_b64 = base64.b64encode(qr_buf.getvalue()).decode("ascii")
+                qr_data_url = f"data:image/png;base64,{qr_b64}"
+                html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta property="og:title" content="{_html_esc(title)}">
+<meta property="og:description" content="{_html_esc(description)}">
+<meta property="og:url" content="{_html_esc(profile_url)}">
+<meta property="og:type" content="profile">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{_html_esc(title)}">
+<meta name="twitter:description" content="{_html_esc(description)}">
+<meta name="twitter:image" content="{_html_esc(og_image) if og_image else ''}">
+{meta_image_tags}
+</head>
+<body>
+<p><a href="{_html_esc(profile_url)}">View profile</a></p>
+<p><img src="{qr_data_url}" alt="QR code: {_html_esc(profile_url)}" width="128" height="128"></p>
+</body>
+</html>"""
+                return HTMLResponse(html)
+            return FileResponse(_index_path, media_type="text/html", headers=_no_cache_headers)
+
         app.mount("/_app", StaticFiles(directory=_app_dir, html=False), name="frontend_app")
         app.mount("/", StaticFiles(directory=_frontend_build_dir, html=True), name="frontend")
         _serving_spa = True
@@ -127,7 +221,7 @@ if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
 if not _serving_spa:
     @app.get("/")
     async def root():
-        return {"service": "Tritone Cards API", "docs": "/docs"}
+        return {"service": "Brutality Cards API", "docs": "/docs"}
 
 
 def _did_web_id_from_url(url: str) -> str:

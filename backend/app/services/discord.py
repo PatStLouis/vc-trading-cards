@@ -47,8 +47,8 @@ async def _request(method: str, path: str, bot_token: str, **kwargs) -> dict | l
 
 
 SLASH_COMMANDS_PAYLOAD = [
-    {"name": "wallet", "description": "Open your Tritone Cards deck (The Devil's Interval Collectible Cards)", "type": 1},
-    {"name": "collection", "description": "View your Tritone Cards collection", "type": 1},
+    {"name": "wallet", "description": "Open your Brutality Cards deck (The Devil's Interval Collectible Cards)", "type": 1},
+    {"name": "collection", "description": "View your Brutality Cards collection", "type": 1},
 ]
 
 
@@ -184,13 +184,13 @@ async def _build_response_wallet(user_id: str | None, frontend_url: str) -> dict
     url = frontend_url.rstrip("/") + "/wallet"
     if not user_id:
         return _build_message_response(
-            f"**Tritone Cards** — The Devil's Interval Collectible Cards\n\nOpen your deck: {url}\nLog in with Discord to see your cards.",
+            f"**Brutality Cards** — The Devil's Interval Collectible Cards\n\nOpen your deck: {url}\nLog in with Discord to see your cards.",
             ephemeral=True,
         )
     tenant = await get_tenant_by_discord_sub(user_id)
     if not tenant:
         return _build_message_response(
-            f"**Tritone Cards** — The Devil's Interval Collectible Cards\n\nYou don't have a deck yet. Log in once to create it:\n{url}",
+            f"**Brutality Cards** — The Devil's Interval Collectible Cards\n\nYou don't have a deck yet. Log in once to create it:\n{url}",
             ephemeral=True,
         )
     count = 0
@@ -199,10 +199,10 @@ async def _build_response_wallet(user_id: str | None, frontend_url: str) -> dict
         count = len(creds) if isinstance(creds, list) else 0
     if count:
         return _build_message_response(
-            f"**Tritone Cards** · My deck\n\nYou have **{count}** card(s). Open your deck: {url}",
+            f"**Brutality Cards** · My deck\n\nYou have **{count}** card(s). Open your deck: {url}",
             ephemeral=True,
         )
     return _build_message_response(
-        f"**Tritone Cards** · My deck\n\nOpen your deck: {url}",
+        f"**Brutality Cards** · My deck\n\nOpen your deck: {url}",
         ephemeral=True,
     )
