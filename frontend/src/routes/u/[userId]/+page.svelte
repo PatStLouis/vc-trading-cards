@@ -1,7 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { fetchApi, apiUrl } from '$lib/api';
-  import { onMount, tick } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
 
   const API = apiUrl();
   function cardImageUrl(card: Card): string {
@@ -77,9 +77,19 @@
     return `https://www.youtube-nocookie.com/embed/${v}?autoplay=1&mute=${m}&playsinline=1`;
   }
 
+  /** Embed URL with enablejsapi=1 and origin for YouTube IFrame API (unmute without reload). */
+  const youtubeEmbedSrcWithApi = $derived.by(() => {
+    const base = youtubeEmbedSrc(true);
+    if (!base || typeof window === 'undefined') return base;
+    const sep = base.includes('?') ? '&' : '?';
+    return `${base}${sep}enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}`;
+  });
+
   let user: PublicUser | null = $state(null);
-  let youtubeUnmuted = $state(true);
+  let youtubeUnmuted = $state(false);
   let youtubeEmbedBlocked = $state(false);
+  let ytIframeEl: HTMLIFrameElement | null = $state(null);
+  let ytPlayer: { unMute: () => void; setVolume: (n: number) => void } | null = $state(null);
   let cards: Card[] = $state([]);
   let loading = $state(true);
   let error = $state('');
@@ -144,6 +154,66 @@
     showCopyFallback = false;
     fallbackUrl = '';
   }
+
+  function loadYtApi(): Promise<void> {
+    const w = typeof window !== 'undefined' ? window : null;
+    if (!w) return Promise.resolve();
+    if ((w as unknown as { YT?: { Player: unknown } }).YT?.Player) return Promise.resolve();
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        if (script.parentNode) script.remove();
+        resolve();
+      };
+      const prev = (w as unknown as { onYouTubeIframeAPIReady?: () => void }).onYouTubeIframeAPIReady;
+      (w as unknown as { onYouTubeIframeAPIReady: () => void }).onYouTubeIframeAPIReady = () => {
+        if (prev) prev();
+        done();
+      };
+      script.src = 'https://www.youtube.com/iframe_api';
+      script.async = true;
+      script.onerror = () => done(); // e.g. script blocked or returned text/html (wrong MIME)
+      const timeout = setTimeout(done, 10000);
+      document.head.appendChild(script);
+    });
+  }
+
+  function onYtIframeLoad() {
+    if (!ytIframeEl) return;
+    ytPlayer = null;
+    loadYtApi().then(() => {
+      const YT = (window as unknown as { YT?: { Player: new (el: HTMLIFrameElement, opts: { events: { onReady: (e: { target: { unMute: () => void; setVolume: (n: number) => void } }) => void } }) => unknown } }).YT;
+      if (!YT?.Player || !ytIframeEl) return;
+      new YT.Player(ytIframeEl, {
+        events: {
+          onReady(e: { target: { unMute: () => void; setVolume: (n: number) => void } }) {
+            ytPlayer = e.target;
+          },
+        },
+      });
+    });
+  }
+
+  function unmuteYt() {
+    if (ytPlayer) {
+      try {
+        ytPlayer.unMute();
+        ytPlayer.setVolume(100);
+      } catch (_) {}
+      youtubeUnmuted = true;
+    } else {
+      youtubeUnmuted = true;
+    }
+  }
+
+  onDestroy(() => {
+    ytPlayer = null;
+    ytIframeEl = null;
+  });
 
   onMount(() => {
     // Detect restricted context (e.g. sandboxed iframe) for YouTube embed and clipboard
@@ -280,26 +350,28 @@
             </section>
           {/if}
 
-          <!-- Profile song: static iframe with youtube-nocookie.com (no external script = no MIME error; no ads until play = fewer blocked requests). -->
+          <!-- Profile song: autoplay muted; Unmute uses YouTube IFrame API so video keeps playing. -->
           {#if user.profile_song_url && isYouTubeUrl(user.profile_song_url)}
-            {@const embedSrc = youtubeEmbedSrc(!youtubeUnmuted)}
+            {@const embedSrcWithApi = youtubeEmbedSrcWithApi}
             {@const watchUrl = youtubeVideoIdResolved ? `https://www.youtube.com/watch?v=${youtubeVideoIdResolved}` : user.profile_song_url}
-            {#if embedSrc && !youtubeEmbedBlocked}
+            {#if embedSrcWithApi && !youtubeEmbedBlocked}
               <section class="profile-section">
                 <h2 class="profile-section__title">Currently listening</h2>
                 <div class="aspect-video rounded-lg overflow-hidden border border-border bg-black relative">
                   <iframe
                     title="Profile song"
-                    src={embedSrc}
+                    src={embedSrcWithApi}
                     class="w-full h-full"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowfullscreen
+                    bind:this={ytIframeEl}
+                    onload={onYtIframeLoad}
                   ></iframe>
                   {#if !youtubeUnmuted}
                     <button
                       type="button"
                       class="absolute bottom-2 right-2 rounded-md bg-black/70 px-3 py-1.5 text-xs font-medium text-white hover:bg-black/90 focus:outline-none focus:ring-2 focus:ring-white/50"
-                      onclick={() => (youtubeUnmuted = true)}
+                      onclick={unmuteYt}
                     >
                       Unmute
                     </button>

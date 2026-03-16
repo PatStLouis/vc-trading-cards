@@ -534,7 +534,7 @@
                             <span class="absolute top-1 left-1/2 -translate-x-1/2 z-10 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums" aria-label="{count} copies">×{count}</span>
                           {/if}
                         </div>
-                        <span class="mt-2 text-xs text-muted-foreground truncate w-full text-center">{card.name}</span>
+                        <span class="mt-2 text-xs text-muted-foreground truncate w-full text-center">{count} {count === 1 ? 'copy' : 'copies'}</span>
                       </div>
                     {/each}
                   </div>
