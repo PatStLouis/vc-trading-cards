@@ -71,7 +71,7 @@
     user?.profile_song_url && isYouTubeUrl(user.profile_song_url) ? youtubeVideoId(user.profile_song_url) : null
   );
 
-  /** Static embed URL using youtube-nocookie.com (no API script = no MIME error; no ads/tracking until play = fewer blocked requests). Muted so autoplay is allowed. */
+  /** Static embed URL using youtube-nocookie.com (no API script = no MIME error; no ads/tracking until play = fewer blocked requests). */
   function youtubeEmbedSrc(muted: boolean): string | null {
     const v = youtubeVideoIdResolved;
     if (!v) return null;
@@ -80,7 +80,8 @@
   }
 
   let user: PublicUser | null = $state(null);
-  let youtubeUnmuted = $state(false);
+  /** Start unmuted; set to false and reload embed if we need to fall back to muted autoplay. */
+  let youtubeUnmuted = $state(true);
   let cards: Card[] = $state([]);
   let loading = $state(true);
   let error = $state('');
