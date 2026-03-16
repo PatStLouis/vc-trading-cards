@@ -251,7 +251,7 @@
               {#if isGrid}
                 <div class="wallet-set__grid grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
                   {#each setItems as { card, count } (cardGroupKey(card))}
-                    <div class="wallet-set__grid-card flex justify-center relative">
+                    <div class="wallet-set__grid-card group flex justify-center relative">
                       <TradingCard
                         noTilt={true}
                         id={card.id}
@@ -266,7 +266,7 @@
                         back={backUrlForSetName(String(card.set ?? ''))}
                       />
                       {#if count > 1}
-                        <span class="wallet-card-count absolute top-1 left-1/2 -translate-x-1/2 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums" aria-label="{count} copies">×{count}</span>
+                        <span class="wallet-card-count absolute top-1 left-1/2 -translate-x-1/2 z-10 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" aria-label="{count} copies">×{count}</span>
                       {/if}
                     </div>
                   {/each}
@@ -274,7 +274,7 @@
               {:else}
                 <div class="wallet-row__scroll flex gap-6 overflow-x-auto overflow-y-visible pb-2 -mx-1 px-1">
                   {#each setItems as { card, count } (cardGroupKey(card))}
-                    <div class="wallet-row__card flex-shrink-0 w-[min(240px,68vw)] max-w-[240px] relative">
+                    <div class="wallet-row__card group flex-shrink-0 w-[min(240px,68vw)] max-w-[240px] relative">
                       <TradingCard
                         id={card.id}
                         name={String(card.name ?? 'Card')}
@@ -288,7 +288,7 @@
                         back={backUrlForSetName(String(card.set ?? ''))}
                       />
                       {#if count > 1}
-                        <span class="wallet-card-count absolute top-1 left-1/2 -translate-x-1/2 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums" aria-label="{count} copies">×{count}</span>
+                        <span class="wallet-card-count absolute top-1 left-1/2 -translate-x-1/2 z-10 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" aria-label="{count} copies">×{count}</span>
                       {/if}
                     </div>
                   {/each}
@@ -312,7 +312,7 @@
   }
 
   .wallet-card-count {
-    z-index: 1;
+    z-index: 10;
   }
 
   .wallet-empty__icon {

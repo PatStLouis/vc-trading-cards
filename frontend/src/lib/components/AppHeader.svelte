@@ -16,7 +16,7 @@
   let { title, user, showExploreButton = true, showHomeLink = false }: Props = $props();
 
   const pendingCount = $derived(user?.pending_issued_count ?? 0);
-  const showNotificationBell = $derived(pendingCount > 0);
+  const hasNotifications = $derived(pendingCount > 0);
 
   let menuOpen = $state(false);
   let menuButtonEl: HTMLButtonElement | null = $state(null);
@@ -56,20 +56,20 @@
     </nav>
     <div class="flex items-center gap-4 shrink-0">
       {#if user}
-        {#if showNotificationBell}
-          <a
-            href="/wallet"
-            class="app-header__bell relative flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
-            aria-label="{pendingCount} new card(s) in your deck — go to My Deck"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
+        <a
+          href="/wallet"
+          class="app-header__bell relative flex items-center justify-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background {hasNotifications ? 'h-10 w-10' : 'h-9 w-9 opacity-80'}"
+          aria-label={hasNotifications ? `${pendingCount} new card(s) in your deck — go to My Deck` : 'My Deck'}
+        >
+          <svg class="{hasNotifications ? 'w-5 h-5' : 'w-4 h-4'}" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+          </svg>
+          {#if hasNotifications}
             <span class="app-header__bell-badge absolute -top-0.5 -right-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
               {pendingCount > 99 ? '99+' : pendingCount}
             </span>
-          </a>
-        {/if}
+          {/if}
+        </a>
         <span class="app-header__meta text-muted-foreground text-sm truncate max-w-[120px] sm:max-w-[180px]">@{user.username}</span>
         <div class="app-header__menu relative">
           <button
