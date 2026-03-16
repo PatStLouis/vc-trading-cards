@@ -57,19 +57,21 @@
       : 'var(--color-primary)'
   );
 
-  /** YouTube embed URL from watch URL */
-  function youtubeEmbedUrl(url: string): string | null {
+  /** YouTube embed URL from watch URL. Start muted so autoplay works when opening shareable link (browser policy). */
+  function youtubeEmbedUrl(url: string, muted = true): string | null {
     try {
       const u = new URL(url);
       if (/youtube\.com|youtu\.be/.test(u.hostname)) {
         const v = u.searchParams.get('v') || u.pathname.split('/').pop();
-        return v ? `https://www.youtube.com/embed/${v}?autoplay=1&mute=0` : null;
+        const mute = muted ? '1' : '0';
+        return v ? `https://www.youtube.com/embed/${v}?autoplay=1&mute=${mute}` : null;
       }
     } catch (_) {}
     return null;
   }
 
   let user: PublicUser | null = $state(null);
+  let youtubeUnmuted = $state(false);
   let cards: Card[] = $state([]);
   let loading = $state(true);
   let error = $state('');
@@ -188,13 +190,13 @@
             </section>
           {/if}
 
-          <!-- Profile song: YouTube embed or custom audio player -->
+          <!-- Profile song: YouTube embed or custom audio player. Start muted so autoplay works on shareable link. -->
           {#if user.profile_song_url && isYouTubeUrl(user.profile_song_url)}
-            {@const embed = youtubeEmbedUrl(user.profile_song_url)}
+            {@const embed = youtubeEmbedUrl(user.profile_song_url, youtubeUnmuted)}
             {#if embed}
               <section class="profile-section">
                 <h2 class="profile-section__title">Currently listening</h2>
-                <div class="aspect-video rounded-lg overflow-hidden border border-border bg-black">
+                <div class="aspect-video rounded-lg overflow-hidden border border-border bg-black relative">
                   <iframe
                     title="Profile song"
                     src={embed}
@@ -202,6 +204,15 @@
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowfullscreen
                   />
+                  {#if !youtubeUnmuted}
+                    <button
+                      type="button"
+                      class="absolute bottom-2 right-2 rounded-md bg-black/70 px-3 py-1.5 text-xs font-medium text-white hover:bg-black/90 focus:outline-none focus:ring-2 focus:ring-white/50"
+                      onclick={() => (youtubeUnmuted = true)}
+                    >
+                      Unmute
+                    </button>
+                  {/if}
                 </div>
               </section>
             {/if}

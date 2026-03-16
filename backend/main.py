@@ -171,6 +171,7 @@ if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
             ua = (user_agent or "").lower()
             return (
                 "discord" in ua
+                or "discordbot" in ua  # Discord link preview: Discordbot/2.0
                 or "facebookexternalhit" in ua
                 or "twitterbot" in ua
                 or "telegrambot" in ua
@@ -186,7 +187,7 @@ if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
                 if not profile:
                     from fastapi import HTTPException
                     raise HTTPException(status_code=404, detail="User not found")
-                base = (request.base_url or "").rstrip("/")
+                base = str(request.base_url).rstrip("/") if request.base_url else ""
                 api_base = settings.backend_url.rstrip("/")
                 title = profile.get("profile_headline") or profile.get("username") or profile.get("poser_username") or "Brutality Cards"
                 desc_parts = []
