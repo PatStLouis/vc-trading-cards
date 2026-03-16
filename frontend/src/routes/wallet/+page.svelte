@@ -251,45 +251,45 @@
               {#if isGrid}
                 <div class="wallet-set__grid grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
                   {#each setItems as { card, count } (cardGroupKey(card))}
-                    <div class="wallet-set__grid-card group flex justify-center relative">
-                      <TradingCard
-                        noTilt={true}
-                        id={card.id}
-                        name={String(card.name ?? 'Card')}
-                        number={String(card.number ?? '')}
-                        set={String(card.set ?? '')}
-                        types={Array.isArray(card.types) ? card.types : [card.types].filter(Boolean)}
-                        subtypes={String(card.subtypes ?? 'trading-cards')}
-                        supertype={String(card.supertype ?? 'trading-card')}
-                        rarity={String(card.rarity ?? 'common')}
-                        img={cardImageUrl(card)}
-                        back={backUrlForSetName(String(card.set ?? ''))}
-                      />
-                      {#if count > 1}
-                        <span class="wallet-card-count absolute top-1 left-1/2 -translate-x-1/2 z-10 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" aria-label="{count} copies">×{count}</span>
-                      {/if}
+                    <div class="wallet-set__grid-card group flex flex-col items-center relative">
+                      <div class="w-full relative">
+                        <TradingCard
+                          noTilt={true}
+                          id={card.id}
+                          name={String(card.name ?? 'Card')}
+                          number={String(card.number ?? '')}
+                          set={String(card.set ?? '')}
+                          types={Array.isArray(card.types) ? card.types : [card.types].filter(Boolean)}
+                          subtypes={String(card.subtypes ?? 'trading-cards')}
+                          supertype={String(card.supertype ?? 'trading-card')}
+                          rarity={String(card.rarity ?? 'common')}
+                          img={cardImageUrl(card)}
+                          back={backUrlForSetName(String(card.set ?? ''))}
+                        />
+                        <span class="absolute top-2 right-2 z-10 min-w-[1.75rem] rounded-md bg-primary px-2 py-1 text-center text-sm font-bold text-primary-foreground tabular-nums shadow-md ring-1 ring-black/20" aria-label="{count} copies">×{count}</span>
+                      </div>
                     </div>
                   {/each}
                 </div>
               {:else}
                 <div class="wallet-row__scroll flex gap-6 overflow-x-auto overflow-y-visible pb-2 -mx-1 px-1">
                   {#each setItems as { card, count } (cardGroupKey(card))}
-                    <div class="wallet-row__card group flex-shrink-0 w-[min(240px,68vw)] max-w-[240px] relative">
-                      <TradingCard
-                        id={card.id}
-                        name={String(card.name ?? 'Card')}
-                        number={String(card.number ?? '')}
-                        set={String(card.set ?? '')}
-                        types={Array.isArray(card.types) ? card.types : [card.types].filter(Boolean)}
-                        subtypes={String(card.subtypes ?? 'trading-cards')}
-                        supertype={String(card.supertype ?? 'trading-card')}
-                        rarity={String(card.rarity ?? 'common')}
-                        img={cardImageUrl(card)}
-                        back={backUrlForSetName(String(card.set ?? ''))}
-                      />
-                      {#if count > 1}
-                        <span class="wallet-card-count absolute top-1 left-1/2 -translate-x-1/2 z-10 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" aria-label="{count} copies">×{count}</span>
-                      {/if}
+                    <div class="wallet-row__card group flex flex-col items-center flex-shrink-0 w-[min(240px,68vw)] max-w-[240px] relative">
+                      <div class="w-full relative">
+                        <TradingCard
+                          id={card.id}
+                          name={String(card.name ?? 'Card')}
+                          number={String(card.number ?? '')}
+                          set={String(card.set ?? '')}
+                          types={Array.isArray(card.types) ? card.types : [card.types].filter(Boolean)}
+                          subtypes={String(card.subtypes ?? 'trading-cards')}
+                          supertype={String(card.supertype ?? 'trading-card')}
+                          rarity={String(card.rarity ?? 'common')}
+                          img={cardImageUrl(card)}
+                          back={backUrlForSetName(String(card.set ?? ''))}
+                        />
+                        <span class="absolute top-2 right-2 z-10 min-w-[1.75rem] rounded-md bg-primary px-2 py-1 text-center text-sm font-bold text-primary-foreground tabular-nums shadow-md ring-1 ring-black/20" aria-label="{count} copies">×{count}</span>
+                      </div>
                     </div>
                   {/each}
                 </div>
@@ -309,10 +309,6 @@
     border-radius: 50%;
     background: currentColor;
     opacity: 0.8;
-  }
-
-  .wallet-card-count {
-    z-index: 10;
   }
 
   .wallet-empty__icon {

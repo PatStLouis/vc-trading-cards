@@ -497,11 +497,8 @@
                             noTilt
                             noPop
                           />
-                          {#if count > 1}
-                            <span class="absolute top-1 left-1/2 -translate-x-1/2 z-10 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums" aria-label="{count} copies">×{count}</span>
-                          {/if}
+                          <span class="absolute top-2 right-2 z-10 min-w-[1.75rem] rounded-md bg-primary px-2 py-1 text-center text-sm font-bold text-primary-foreground tabular-nums shadow-md ring-1 ring-black/20" aria-label="{count} copies">×{count}</span>
                         </div>
-                        <span class="mt-2 text-xs text-muted-foreground truncate w-full text-center">{count} {count === 1 ? 'copy' : 'copies'}</span>
                       </div>
                     {/each}
                   </div>
@@ -524,11 +521,8 @@
                             noTilt
                             noPop
                           />
-                          {#if count > 1}
-                            <span class="absolute top-1 left-1/2 -translate-x-1/2 z-10 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums" aria-label="{count} copies">×{count}</span>
-                          {/if}
+                          <span class="absolute top-2 right-2 z-10 min-w-[1.75rem] rounded-md bg-primary px-2 py-1 text-center text-sm font-bold text-primary-foreground tabular-nums shadow-md ring-1 ring-black/20" aria-label="{count} copies">×{count}</span>
                         </div>
-                        <span class="mt-2 text-xs text-muted-foreground truncate w-full text-center">{count} {count === 1 ? 'copy' : 'copies'}</span>
                       </div>
                     {/each}
                   </div>
