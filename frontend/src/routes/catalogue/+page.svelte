@@ -70,6 +70,25 @@
     return '/card-back.svg';
   }
 
+  // Group user collection by card (set + name + number) and count, like My deck
+  function userCollectionGroupKey(card: Card): string {
+    const set = (card?.set_id ?? card?.set_name ?? '').trim();
+    const name = (card?.name ?? '').trim();
+    const num = (card?.number ?? '').trim();
+    return `${set}:${name}:${num}`;
+  }
+  const userCollectionGrouped = $derived.by(() => {
+    const list = userCollection || [];
+    const map = new Map<string, { card: Card; count: number }>();
+    for (const card of list) {
+      const key = userCollectionGroupKey(card);
+      const existing = map.get(key);
+      if (existing) existing.count += 1;
+      else map.set(key, { card: { ...card }, count: 1 });
+    }
+    return Array.from(map.values());
+  });
+
   onMount(async () => {
     try {
       const raw = localStorage.getItem(CATALOGUE_GRID_SETS_KEY);
@@ -467,9 +486,9 @@
               <div class="catalogue-set catalogue-set--grid transition-[opacity,transform] duration-300 ease-out" class:catalogue-set--grid={userCollectionGrid}>
                 {#if userCollectionGrid}
                   <div class="catalogue-set__grid grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
-                    {#each userCollection as card}
-                      <div class="catalogue-set__grid-card flex flex-col items-center">
-                        <div class="w-full">
+                    {#each userCollectionGrouped as { card, count } (userCollectionGroupKey(card))}
+                      <div class="catalogue-set__grid-card flex flex-col items-center relative">
+                        <div class="w-full relative">
                           <TradingCard
                             id={card.id}
                             name={card.name}
@@ -484,6 +503,9 @@
                             noTilt
                             noPop
                           />
+                          {#if count > 1}
+                            <span class="absolute top-1 left-1/2 -translate-x-1/2 z-10 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums" aria-label="{count} copies">×{count}</span>
+                          {/if}
                         </div>
                         <span class="mt-2 text-xs text-muted-foreground truncate w-full text-center">{card.name}</span>
                       </div>
@@ -491,9 +513,9 @@
                   </div>
                 {:else}
                   <div class="catalogue-row__scroll flex gap-6 overflow-x-auto overflow-y-visible pb-2 -mx-1 px-1">
-                    {#each userCollection as card}
-                      <div class="catalogue-row__card flex flex-col items-center flex-shrink-0 w-[min(240px,68vw)] max-w-[240px]">
-                        <div class="w-full">
+                    {#each userCollectionGrouped as { card, count } (userCollectionGroupKey(card))}
+                      <div class="catalogue-row__card flex flex-col items-center flex-shrink-0 w-[min(240px,68vw)] max-w-[240px] relative">
+                        <div class="w-full relative">
                           <TradingCard
                             id={card.id}
                             name={card.name}
@@ -508,6 +530,9 @@
                             noTilt
                             noPop
                           />
+                          {#if count > 1}
+                            <span class="absolute top-1 left-1/2 -translate-x-1/2 z-10 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums" aria-label="{count} copies">×{count}</span>
+                          {/if}
                         </div>
                         <span class="mt-2 text-xs text-muted-foreground truncate w-full text-center">{card.name}</span>
                       </div>

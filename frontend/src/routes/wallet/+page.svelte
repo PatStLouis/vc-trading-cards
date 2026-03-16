@@ -266,7 +266,7 @@
                         back={backUrlForSetName(String(card.set ?? ''))}
                       />
                       {#if count > 1}
-                        <span class="wallet-card-count absolute top-1 right-1 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums" aria-label="{count} copies">×{count}</span>
+                        <span class="wallet-card-count absolute top-1 left-1/2 -translate-x-1/2 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums" aria-label="{count} copies">×{count}</span>
                       {/if}
                     </div>
                   {/each}
@@ -288,7 +288,7 @@
                         back={backUrlForSetName(String(card.set ?? ''))}
                       />
                       {#if count > 1}
-                        <span class="wallet-card-count absolute top-1 right-1 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums" aria-label="{count} copies">×{count}</span>
+                        <span class="wallet-card-count absolute top-1 left-1/2 -translate-x-1/2 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums" aria-label="{count} copies">×{count}</span>
                       {/if}
                     </div>
                   {/each}
