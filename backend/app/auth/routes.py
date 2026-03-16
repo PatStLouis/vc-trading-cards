@@ -185,6 +185,7 @@ async def _handle_twitch_callback(request: Request, code: str):
         return _frontend_redirect("/", "error=user_fetch_failed")
     provider_user_id = str(user_data.get("id", ""))
     provider_username = user_data.get("login") or user_data.get("display_name") or ""
+    provider_avatar = (user_data.get("profile_image_url") or "").strip() or None
 
     cookie = request.cookies.get(settings.session_cookie_name)
     session = decode_session(cookie) if cookie else None
@@ -192,7 +193,7 @@ async def _handle_twitch_callback(request: Request, code: str):
 
     if current_user_id:
         await ensure_user_exists(current_user_id)
-        result = await add_account_binding(current_user_id, "twitch", provider_user_id, provider_username)
+        result = await add_account_binding(current_user_id, "twitch", provider_user_id, provider_username, provider_avatar=provider_avatar)
         if result == "duplicate":
             return _frontend_redirect("/wallet/account", "linked=twitch")
         if result == "conflict":
@@ -201,7 +202,7 @@ async def _handle_twitch_callback(request: Request, code: str):
                 await merge_users(current_user_id, other_user_id)
         return _frontend_redirect("/wallet", "merged=twitch")
     else:
-        user_id = await get_or_create_user_by_provider("twitch", provider_user_id, provider_username)
+        user_id = await get_or_create_user_by_provider("twitch", provider_user_id, provider_username, provider_avatar=provider_avatar)
         tenant = await _ensure_tenant_sync(user_id, provider_username, provider_user_id)
         if not tenant:
             return _frontend_redirect("/", "error=tenant_failed")

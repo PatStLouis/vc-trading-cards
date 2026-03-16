@@ -15,7 +15,7 @@
   };
   type User = { user_id: string; username: string; poser_username?: string | null; collection_count: number };
 
-  let me: { username?: string; avatar_url?: string | null; is_admin?: boolean } | null = $state(null);
+  let me: { username?: string; avatar_url?: string | null; is_admin?: boolean; pending_issued_count?: number } | null = $state(null);
   let tab: 'catalog' | 'users' = $state('catalog');
   let sets: Set[] = $state([]);
   let setsLoading = $state(false);
@@ -215,7 +215,7 @@
   <div class="texture-overlay" aria-hidden="true"></div>
 
   <div class="relative z-10 max-w-6xl mx-auto">
-    <AppHeader title="Explore" user={me ? { username: me.username ?? '', avatar_url: me.avatar_url, is_admin: me.is_admin } : null} showExploreButton={false} showHomeLink={true} />
+    <AppHeader title="Explore" user={me ? { username: me.username ?? '', avatar_url: me.avatar_url, is_admin: me.is_admin, pending_issued_count: me.pending_issued_count } : null} showExploreButton={false} showHomeLink={true} />
     <p class="text-muted-foreground text-sm -mt-4 mb-6">Browse sets and cards, find users, and see who has which cards.</p>
 
     <div class="flex gap-2 mb-6 border-b border-border pb-2">

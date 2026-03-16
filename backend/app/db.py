@@ -49,6 +49,7 @@ async def init_db():
         await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_song_upload_path TEXT")
         await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_accent_color TEXT")
         await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_spotify_url TEXT")
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_issued_seen_at TIMESTAMPTZ")
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS user_accounts (
                 user_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
@@ -444,6 +445,27 @@ async def update_discord_profile_for_user(
             (provider_username or "").strip(),
             (provider_avatar or "").strip() or None,
             (provider_discriminator or "").strip() or None,
+            user_id,
+        )
+    return result and "UPDATE 1" in result
+
+
+async def update_twitch_profile_for_user(
+    user_id: str,
+    provider_username: str,
+    provider_avatar: str | None = None,
+) -> bool:
+    """Update Twitch account profile (username, profile_image_url stored in provider_avatar). Returns True if a row was updated."""
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """
+            UPDATE user_accounts
+            SET provider_username = $1, provider_avatar = $2
+            WHERE user_id = $3::uuid AND provider = 'twitch'
+            """,
+            (provider_username or "").strip(),
+            (provider_avatar or "").strip() or None,
             user_id,
         )
     return result and "UPDATE 1" in result
@@ -1061,6 +1083,32 @@ async def get_admin_issued_card_ids(user_id: str) -> list[str]:
             user_id,
         )
     return [str(r["card_id"]) for r in rows]
+
+
+async def get_pending_issued_count(user_id: str) -> int:
+    """Count of admin-issued cards for this user that are newer than last_issued_seen_at (not yet 'checked out')."""
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        n = await conn.fetchval(
+            """
+            SELECT COUNT(*)::int FROM admin_issued_cards a
+            JOIN users u ON u.user_id = a.user_id
+            WHERE a.user_id = $1::uuid
+              AND (u.last_issued_seen_at IS NULL OR a.issued_at > u.last_issued_seen_at)
+            """,
+            user_id,
+        )
+    return n or 0
+
+
+async def set_last_issued_seen_at(user_id: str) -> None:
+    """Mark the user as having seen their issued cards (e.g. after visiting wallet). Sets last_issued_seen_at = NOW()."""
+    pool = _get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE users SET last_issued_seen_at = NOW() WHERE user_id = $1::uuid",
+            user_id,
+        )
 
 
 # ---- Card ledger (event-driven: append events, then apply to read models) ----

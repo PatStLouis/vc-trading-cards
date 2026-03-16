@@ -11,7 +11,7 @@
   import { page } from '$app/stores';
 
   type SetInfo = { id: string; name: string; card_back_path?: string };
-  let user: { username: string; wallet_id: string; is_admin?: boolean; avatar_url?: string | null } | null = $state(null);
+  let user: { username: string; wallet_id: string; is_admin?: boolean; avatar_url?: string | null; pending_issued_count?: number } | null = $state(null);
   let cards: Array<Record<string, unknown>> = $state([]);
   let sets: SetInfo[] = $state([]);
   let loading = $state(true);
@@ -73,6 +73,12 @@
         const data = await setsRes.json();
         sets = data.sets || [];
       }
+      // Mark issued cards as seen so notification badge clears
+      try {
+        await fetchApi('/api/wallet/seen-issued', { method: 'POST', auth: true });
+        const meAgain = await fetchApi('/api/me', { auth: true });
+        if (meAgain.ok) user = await meAgain.json();
+      } catch (_) {}
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load';
     } finally {
@@ -112,20 +118,40 @@
     }
   });
 
-  // Group cards by set; preserve order of first appearance
+  /** Unique key for collapsing duplicates (same set + name + number = same card). */
+  function cardGroupKey(card: Record<string, unknown>): string {
+    const set = String(card.set ?? '').trim();
+    const name = String(card.name ?? '').trim();
+    const number = String(card.number ?? '').trim();
+    return `${set}\0${name}\0${number}`;
+  }
+
+  // Group cards by set; within each set collapse duplicates and count
   const cardsBySet = $derived.by(() => {
-    const groups = new Map<string, Array<Record<string, unknown>>>();
-    const order: string[] = [];
+    const setToGroups = new Map<string, Map<string, Array<Record<string, unknown>>>>();
+    const setOrder: string[] = [];
     for (const card of cards) {
       const set = String(card.set ?? 'Other').trim() || 'Other';
-      if (!groups.has(set)) {
-        groups.set(set, []);
-        order.push(set);
+      if (!setToGroups.has(set)) {
+        setToGroups.set(set, new Map());
+        setOrder.push(set);
       }
-      groups.get(set)!.push(card);
+      const groupMap = setToGroups.get(set)!;
+      const key = cardGroupKey(card);
+      if (!groupMap.has(key)) groupMap.set(key, []);
+      groupMap.get(key)!.push(card);
     }
-    return order.map((set) => ({ set, items: groups.get(set)! }));
+    return setOrder.map((set) => {
+      const groupMap = setToGroups.get(set)!;
+      const items = Array.from(groupMap.values()).map((arr) => ({
+        card: arr[0] as Record<string, unknown>,
+        count: arr.length,
+      }));
+      return { set, items };
+    });
   });
+
+  const totalCardCount = $derived(cards.length);
 
   // Per-set view mode: sets in this Set show as grid; others show as horizontal row (persisted)
   const GRID_SETS_KEY = 'wallet-grid-sets';
@@ -159,7 +185,7 @@
       <div class="wallet-header__stat mt-4 flex flex-wrap items-center gap-2">
         <div class="inline-flex items-center gap-2 rounded-full bg-primary/10 text-primary px-4 py-1.5 text-sm font-medium">
           <span class="wallet-header__stat-dot" aria-hidden="true"></span>
-          {cards.length} {cards.length === 1 ? 'card' : 'cards'}
+          {totalCardCount} {totalCardCount === 1 ? 'card' : 'cards'}
         </div>
       </div>
     {/if}
@@ -196,7 +222,7 @@
       </Card.Root>
     {:else}
       <div class="wallet-rows space-y-8 overflow-visible" aria-label="Collectible cards by set">
-        {#each cardsBySet as { set: setName, items: setCards }}
+        {#each cardsBySet as { set: setName, items: setItems }}
           {@const isGrid = gridModeForSet.has(setName)}
           <section class="wallet-set overflow-visible" aria-label="{setName}" class:wallet-set--grid={isGrid}>
             <div class="wallet-set__header flex items-center justify-between gap-2 mb-3 px-1">
@@ -224,8 +250,8 @@
             <div class="wallet-set__content transition-[opacity,transform] duration-300 ease-out">
               {#if isGrid}
                 <div class="wallet-set__grid grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
-                  {#each setCards as card (card.id)}
-                    <div class="wallet-set__grid-card flex justify-center">
+                  {#each setItems as { card, count } (cardGroupKey(card))}
+                    <div class="wallet-set__grid-card flex justify-center relative">
                       <TradingCard
                         noTilt={true}
                         id={card.id}
@@ -239,13 +265,16 @@
                         img={cardImageUrl(card)}
                         back={backUrlForSetName(String(card.set ?? ''))}
                       />
+                      {#if count > 1}
+                        <span class="wallet-card-count absolute top-1 right-1 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums" aria-label="{count} copies">×{count}</span>
+                      {/if}
                     </div>
                   {/each}
                 </div>
               {:else}
                 <div class="wallet-row__scroll flex gap-6 overflow-x-auto overflow-y-visible pb-2 -mx-1 px-1">
-                  {#each setCards as card (card.id)}
-                    <div class="wallet-row__card flex-shrink-0 w-[min(240px,68vw)] max-w-[240px]">
+                  {#each setItems as { card, count } (cardGroupKey(card))}
+                    <div class="wallet-row__card flex-shrink-0 w-[min(240px,68vw)] max-w-[240px] relative">
                       <TradingCard
                         id={card.id}
                         name={String(card.name ?? 'Card')}
@@ -258,6 +287,9 @@
                         img={cardImageUrl(card)}
                         back={backUrlForSetName(String(card.set ?? ''))}
                       />
+                      {#if count > 1}
+                        <span class="wallet-card-count absolute top-1 right-1 rounded-md bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white tabular-nums" aria-label="{count} copies">×{count}</span>
+                      {/if}
                     </div>
                   {/each}
                 </div>
@@ -277,6 +309,10 @@
     border-radius: 50%;
     background: currentColor;
     opacity: 0.8;
+  }
+
+  .wallet-card-count {
+    z-index: 1;
   }
 
   .wallet-empty__icon {

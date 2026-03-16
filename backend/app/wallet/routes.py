@@ -20,12 +20,15 @@ from app.db import (
     webauthn_list_credentials_for_user,
     webauthn_remove_credential,
     get_admin_issued_card_ids,
+    get_pending_issued_count,
+    set_last_issued_seen_at,
     get_user_accounts,
     get_user_poser_username,
     set_poser_username,
     get_user_created_at,
     get_user_created_at_raw,
     update_discord_profile_for_user,
+    update_twitch_profile_for_user,
     get_featured_card_ids,
     set_featured_card_ids,
     get_profile_customization,
@@ -95,6 +98,7 @@ async def me(user: dict = Depends(get_current_user)):
     ) if discord_account else None
     featured_card_ids = await get_featured_card_ids(user["user_id"])
     profile_custom = await get_profile_customization(user["user_id"])
+    pending_issued_count = await get_pending_issued_count(user["user_id"])
     return {
         "user_id": user.get("user_id"),
         "sub": user.get("sub"),
@@ -111,8 +115,16 @@ async def me(user: dict = Depends(get_current_user)):
         "first_login_at": created_at,
         "is_first_login": is_first_login,
         "featured_card_ids": featured_card_ids,
+        "pending_issued_count": pending_issued_count,
         **profile_custom,
     }
+
+
+@router.post("/wallet/seen-issued")
+async def mark_issued_seen(user: dict = Depends(get_current_user)):
+    """Mark the current user as having seen their issued cards (e.g. after visiting My Deck). Clears the notification badge."""
+    await set_last_issued_seen_at(user["user_id"])
+    return {"ok": True}
 
 
 @router.patch("/me", responses={200: response_example(RESPONSE_ME)})
@@ -261,6 +273,29 @@ async def refresh_discord_profile(user: dict = Depends(get_current_user)):
     if discriminator is not None:
         discriminator = str(discriminator).strip()
     updated = await update_discord_profile_for_user(user["user_id"], username, avatar, discriminator)
+    if not updated:
+        raise HTTPException(status_code=500, detail="Failed to update profile")
+    return await me(user=user)
+
+
+@router.post("/me/refresh-twitch", responses={200: response_example(RESPONSE_ME)})
+async def refresh_twitch_profile(user: dict = Depends(get_current_user)):
+    """Refresh Twitch username and avatar from Twitch API (app token). No re-login required."""
+    from fastapi import HTTPException
+    from app.auth.providers.twitch import get_twitch_user_by_id
+    accounts = await get_user_accounts(user["user_id"])
+    twitch_account = next((a for a in accounts if a.get("provider") == "twitch"), None)
+    if not twitch_account:
+        raise HTTPException(status_code=400, detail="No Twitch account linked")
+    provider_user_id = twitch_account.get("provider_user_id") or ""
+    if not provider_user_id:
+        raise HTTPException(status_code=400, detail="Twitch account missing provider_user_id")
+    twitch_user = await get_twitch_user_by_id(provider_user_id)
+    if not twitch_user:
+        raise HTTPException(status_code=502, detail="Could not fetch profile from Twitch")
+    username = (twitch_user.get("login") or twitch_user.get("display_name") or "").strip() or twitch_account.get("provider_username") or ""
+    profile_image_url = (twitch_user.get("profile_image_url") or "").strip() or None
+    updated = await update_twitch_profile_for_user(user["user_id"], username, profile_image_url)
     if not updated:
         raise HTTPException(status_code=500, detail="Failed to update profile")
     return await me(user=user)

@@ -24,7 +24,7 @@
     try {
       const res = await fetchAdmin('/api/admin/stats');
       if (res.status === 401) {
-        error = 'Not logged in or session expired. Log in again from the main page. If you use a separate frontend/backend URL, set VITE_API_URL and FRONTEND_URL in your deployment.';
+        error = 'Not logged in or session expired. Log in again from the main page. If you use a separate frontend/backend URL, set VITE_API_URL and FRONTEND_URL. On a single domain, set COOKIE_DOMAIN (e.g. .tritone.cards) if you use www and apex, or ensure BACKEND_URL matches the host users visit.';
         return;
       }
       if (!res.ok) throw new Error('Failed to load stats');

@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     secret_key: str = os.getenv("SECRET_KEY", "change-me-in-production")
     session_cookie_name: str = "tritone_cards_session"
     session_ttl_seconds: int = 86400 * 7  # 7 days
+    # Optional: explicit cookie domain (e.g. .tritone.cards for www+apex). When unset, production uses backend_url host so cookie works behind proxies.
+    cookie_domain: str = os.getenv("COOKIE_DOMAIN", "")
 
     # ACA-Py multitenancy
     acapy_admin_url: str = os.getenv("ACAPY_ADMIN_URL", "http://localhost:8020")
@@ -73,6 +75,18 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = os.getenv("RATE_LIMIT_ENABLED", "0").strip().lower() in ("1", "true", "yes")
     rate_limit_requests: int = int(os.getenv("RATE_LIMIT_REQUESTS", "100"))
     rate_limit_window_seconds: int = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
+
+    @property
+    def cookie_domain_resolved(self) -> str | None:
+        """Cookie domain for Set-Cookie. Explicit COOKIE_DOMAIN, or backend_url host in production (so cookie works behind proxies)."""
+        if (self.cookie_domain or "").strip():
+            return self.cookie_domain.strip()
+        from urllib.parse import urlparse
+        b = urlparse(self.backend_url)
+        host = (b.hostname or "").strip().lower()
+        if host and self.backend_url.strip().lower().startswith("https") and host not in ("localhost", "127.0.0.1"):
+            return host
+        return None
 
     @property
     def cross_origin_deploy(self) -> bool:

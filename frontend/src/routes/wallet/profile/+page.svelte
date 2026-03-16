@@ -44,6 +44,7 @@
     username?: string;
     avatar_url?: string | null;
     is_admin?: boolean;
+    pending_issued_count?: number;
     featured_card_ids?: string[];
     profile_headline?: string | null;
     profile_bio?: string | null;
@@ -225,7 +226,6 @@
         profile_headline: profileHeadline.trim() || null,
         profile_bio: profileBio.trim() || null,
         profile_accent_color: profileAccentColor.trim() || null,
-        profile_spotify_url: profileSpotifyUrl.trim() || null,
       };
       if (profileSongSource === 'youtube' || profileSongSource === 'direct' || profileSongSource === 'spotify') {
         body.profile_song_url = profileSongUrl.trim() || null;
@@ -272,7 +272,7 @@
   <div class="texture-overlay" aria-hidden="true"></div>
 
   <div class="relative z-10 max-w-2xl mx-auto space-y-4">
-    <AppHeader title="Profile" user={me ? { username: me.username ?? '', avatar_url: me.avatar_url, is_admin: me.is_admin } : null} showExploreButton={false} />
+    <AppHeader title="Profile" user={me ? { username: me.username ?? '', avatar_url: me.avatar_url, is_admin: me.is_admin, pending_issued_count: me.pending_issued_count } : null} showExploreButton={false} />
 
     {#if loading}
       <div class="rounded-xl border border-border/80 bg-card/50 py-8 text-center text-sm text-muted-foreground">Loading…</div>

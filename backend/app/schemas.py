@@ -156,6 +156,7 @@ RESPONSE_ME = {
     "accounts": [{"provider": "discord", "username": "player1"}],
     "first_login_at": "2025-01-15 12:00:00Z",
     "is_first_login": False,
+    "pending_issued_count": 0,
 }
 
 RESPONSE_WALLET_CARDS = {

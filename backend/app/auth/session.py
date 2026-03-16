@@ -43,7 +43,9 @@ def decode_session(token: str) -> dict[str, Any] | None:
 
 
 def session_cookie_kwargs(token: str) -> dict[str, Any]:
-    """Kwargs for Response.set_cookie(). Use SameSite=None when frontend and backend are on different origins."""
+    """Kwargs for Response.set_cookie(). Use SameSite=None when frontend and backend are on different origins.
+    Sets explicit domain in production (from COOKIE_DOMAIN or backend_url host) so the cookie is sent on the
+    public host even behind a proxy, and so www/apex share a cookie when COOKIE_DOMAIN=.example.com."""
     s = get_settings()
     kwargs = {
         "key": s.session_cookie_name,
@@ -52,6 +54,9 @@ def session_cookie_kwargs(token: str) -> dict[str, Any]:
         "httponly": True,
         "path": "/",
     }
+    domain = s.cookie_domain_resolved
+    if domain:
+        kwargs["domain"] = domain
     if s.cross_origin_deploy and s.backend_url.strip().lower().startswith("https"):
         kwargs["samesite"] = "none"
         kwargs["secure"] = True

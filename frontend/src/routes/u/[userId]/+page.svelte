@@ -42,6 +42,16 @@
     } catch { return false; }
   }
 
+  /** Extract YouTube video ID from watch or short URL. */
+  function youtubeVideoId(url: string): string | null {
+    try {
+      const u = new URL(url);
+      if (!/youtube\.com|youtu\.be/.test(u.hostname)) return null;
+      return u.searchParams.get('v') || u.pathname.split('/').filter(Boolean).pop() || null;
+    } catch (_) {}
+    return null;
+  }
+
   const audioSongUrl = $derived(
     user?.profile_song_upload_url || (user?.profile_song_url && !isYouTubeUrl(user.profile_song_url) && !isSpotifyUrl(user.profile_song_url) ? user.profile_song_url : null)
   );
@@ -57,17 +67,16 @@
       : 'var(--color-primary)'
   );
 
-  /** YouTube embed URL from watch URL. Start muted so autoplay works when opening shareable link (browser policy). */
-  function youtubeEmbedUrl(url: string, muted = true): string | null {
-    try {
-      const u = new URL(url);
-      if (/youtube\.com|youtu\.be/.test(u.hostname)) {
-        const v = u.searchParams.get('v') || u.pathname.split('/').pop();
-        const mute = muted ? '1' : '0';
-        return v ? `https://www.youtube.com/embed/${v}?autoplay=1&mute=${mute}` : null;
-      }
-    } catch (_) {}
-    return null;
+  const youtubeVideoIdResolved = $derived(
+    user?.profile_song_url && isYouTubeUrl(user.profile_song_url) ? youtubeVideoId(user.profile_song_url) : null
+  );
+
+  /** Static embed URL using youtube-nocookie.com (no API script = no MIME error; no ads/tracking until play = fewer blocked requests). Muted so autoplay is allowed. */
+  function youtubeEmbedSrc(muted: boolean): string | null {
+    const v = youtubeVideoIdResolved;
+    if (!v) return null;
+    const m = muted ? '1' : '0';
+    return `https://www.youtube-nocookie.com/embed/${v}?autoplay=1&mute=${m}&playsinline=1`;
   }
 
   let user: PublicUser | null = $state(null);
@@ -190,16 +199,16 @@
             </section>
           {/if}
 
-          <!-- Profile song: YouTube embed or custom audio player. Start muted so autoplay works on shareable link. -->
+          <!-- Profile song: static iframe with youtube-nocookie.com (no external script = no MIME error; no ads until play = fewer blocked requests). -->
           {#if user.profile_song_url && isYouTubeUrl(user.profile_song_url)}
-            {@const embed = youtubeEmbedUrl(user.profile_song_url, youtubeUnmuted)}
-            {#if embed}
+            {@const embedSrc = youtubeEmbedSrc(!youtubeUnmuted)}
+            {#if embedSrc}
               <section class="profile-section">
                 <h2 class="profile-section__title">Currently listening</h2>
                 <div class="aspect-video rounded-lg overflow-hidden border border-border bg-black relative">
                   <iframe
                     title="Profile song"
-                    src={embed}
+                    src={embedSrc}
                     class="w-full h-full"
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowfullscreen
@@ -257,18 +266,11 @@
                     {:else}
                       <div class="w-full aspect-[0.718] bg-muted flex items-center justify-center text-xs">?</div>
                     {/if}
-                    <span class="text-xs p-2 truncate w-full text-center font-medium">{card.name ?? card.id}</span>
                   </div>
                 {/each}
               </div>
             </section>
           {/if}
-
-          <!-- Collection count -->
-          <section class="profile-section flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-            <span class="text-muted-foreground">Collection</span>
-            <span class="font-semibold text-foreground">{user.collection_count} {user.collection_count === 1 ? 'card' : 'cards'}</span>
-          </section>
 
           {#if user.collection_count > 0}
             <section class="profile-section">

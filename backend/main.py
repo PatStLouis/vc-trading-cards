@@ -8,7 +8,7 @@ import qrcode
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, Response
 
 from config import get_settings
 from app.db import init_db, close_db, get_user_public, list_collection_for_user
@@ -180,6 +180,75 @@ if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
                 or "linkedinbot" in ua
             )
 
+        def _build_embed_image(user_id: str, profile: dict, featured_cards: list, base_url: str) -> bytes | None:
+            """Build a single PNG with up to 3 featured card thumbnails side-by-side for og:image."""
+            try:
+                from PIL import Image
+            except ImportError:
+                return None
+            upload_base = os.path.abspath(settings.upload_dir)
+            thumb_w, thumb_h = 100, 140
+            padding = 8
+            n = min(3, len(featured_cards))
+            if n == 0:
+                return None
+            out_w = n * thumb_w + (n + 1) * padding
+            out_h = thumb_h + 2 * padding
+            canvas = Image.new("RGB", (out_w, out_h), (18, 18, 18))
+            for i, c in enumerate(featured_cards[:3]):
+                path = (c.get("image_path") or c.get("artwork") or "").strip()
+                if not path or ".." in path or path.startswith("http"):
+                    continue
+                local = os.path.join(upload_base, path if not path.startswith("/") else path.lstrip("/"))
+                if not os.path.isfile(local) or not os.path.normpath(local).startswith(upload_base):
+                    continue
+                try:
+                    img = Image.open(local).convert("RGB")
+                    img.thumbnail((thumb_w, thumb_h), Image.Resampling.LANCZOS)
+                    # Right-align: rightmost card ends at out_w - padding
+                    x = out_w - (n - i) * (thumb_w + padding)
+                    y = padding
+                    canvas.paste(img, (x, y))
+                except Exception:
+                    continue
+            buf = io.BytesIO()
+            canvas.save(buf, format="PNG", optimize=True)
+            return buf.getvalue()  # return canvas even if no images pasted (dark bar), so route doesn't 404
+
+        @app.get("/u/{user_id}/embed.png", response_class=Response)
+        async def _profile_embed_image(request: Request, user_id: str):
+            """Single composite image of featured cards for Discord/social og:image."""
+            from fastapi import HTTPException
+            profile = await get_user_public(user_id)
+            if not profile:
+                raise HTTPException(status_code=404, detail="User not found")
+            featured_ids = profile.get("featured_card_ids") or []
+            cards = await list_collection_for_user(profile["user_id"])
+            card_by_id = {str(c["id"]): c for c in cards}
+            featured_cards = [card_by_id[cid] for cid in featured_ids if cid in card_by_id][:3]
+            base = str(request.base_url).rstrip("/") if request.base_url else ""
+            png = _build_embed_image(user_id, profile, featured_cards, base)
+            if not png:
+                raise HTTPException(status_code=404, detail="No embed image")
+            return Response(content=png, media_type="image/png", headers={"Cache-Control": "public, max-age=300"})
+
+        @app.get("/u/{user_id}/did.json", response_class=JSONResponse)
+        async def _user_did_in_spa(user_id: str):
+            """Serve DID document at /u/{user_id}/did.json when serving SPA (before static mount)."""
+            from fastapi import HTTPException
+            from app.db import get_user_accounts
+            profile = await get_user_public(user_id)
+            if not profile:
+                raise HTTPException(status_code=404, detail="User not found")
+            did_id = _did_web_id_for_user(settings.backend_url, user_id)
+            accounts = await get_user_accounts(profile["user_id"])
+            doc = _build_user_did_document(profile["user_id"], did_id, accounts)
+            return JSONResponse(
+                content=doc,
+                media_type="application/did+ld+json",
+                headers={"Cache-Control": "max-age=300"},
+            )
+
         @app.get("/u/{user_id}", response_class=HTMLResponse)
         async def _profile_embed(request: Request, user_id: str):
             if _is_embed_crawler(request.headers.get("user-agent", "")):
@@ -217,11 +286,12 @@ if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
                         return path
                     return f"{api_base}/uploads/{path}" if not path.startswith("/") else f"{api_base}{path}"
                 card_images = [card_image_url(c) for c in featured_cards if card_image_url(c)]
-                og_image = avatar_url or (card_images[0] if card_images else "")
-                meta_images = [og_image] + [u for u in card_images if u != og_image][:3]
-                meta_image_tags = "".join(
-                    f'<meta property="og:image" content="{_html_esc(u)}">' for u in meta_images if u
-                )
+                # Single composite image for Discord/social (they only show one); fallback to avatar or first card
+                if featured_cards:
+                    og_image = f"{base}/u/{user_id}/embed.png"
+                else:
+                    og_image = avatar_url or (card_images[0] if card_images else "")
+                meta_image_tag = f'<meta property="og:image" content="{_html_esc(og_image)}">' if og_image else ""
                 qr_buf = io.BytesIO()
                 qrcode.make(profile_url, version=1, box_size=4, border=2).save(qr_buf, format="PNG")
                 qr_b64 = base64.b64encode(qr_buf.getvalue()).decode("ascii")
@@ -238,7 +308,7 @@ if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
 <meta name="twitter:title" content="{_html_esc(title)}">
 <meta name="twitter:description" content="{_html_esc(description)}">
 <meta name="twitter:image" content="{_html_esc(og_image) if og_image else ''}">
-{meta_image_tags}
+{meta_image_tag}
 </head>
 <body>
 <p><a href="{_html_esc(profile_url)}">View profile</a></p>
@@ -293,6 +363,17 @@ def _did_web_id_for_poser(backend_url: str, username: str) -> str:
     return f"did:web:{host}:poser:{username}"
 
 
+def _did_web_id_for_user(backend_url: str, user_id: str) -> str:
+    """Build did:web identifier for a user's DID at /u/{user_id}/did.json (path segments u, user_id)."""
+    from urllib.parse import urlparse
+    p = urlparse(backend_url)
+    host = (p.hostname or "localhost").lower()
+    port = p.port
+    if port and port not in (80, 443):
+        return f"did:web:{host}:{port}:u:{user_id}"
+    return f"did:web:{host}:u:{user_id}"
+
+
 @app.get("/.well-known/did.json", response_class=JSONResponse)
 async def well_known_did():
     """Serve the DID document at the root domain (did:web)."""
@@ -308,6 +389,33 @@ async def well_known_did():
     )
 
 
+def _build_user_did_document(user_id: str, did_id: str, accounts: list) -> dict:
+    """Build DID document with Discord/Twitch services from user accounts."""
+    services = []
+    for acc in accounts:
+        if acc["provider"] == "discord":
+            pid = acc["provider_user_id"] or ""
+            services.append({
+                "id": f"{did_id}#discord",
+                "type": "Discord",
+                "serviceEndpoint": f"https://discord.com/users/{pid}" if pid else pid,
+            })
+        elif acc["provider"] == "twitch":
+            login = (acc.get("provider_username") or acc.get("provider_user_id") or "").strip()
+            services.append({
+                "id": f"{did_id}#twitch",
+                "type": "Twitch",
+                "serviceEndpoint": f"https://www.twitch.tv/{login}" if login else acc["provider_user_id"],
+            })
+    doc = {
+        "@context": ["https://www.w3.org/ns/did/v1"],
+        "id": did_id,
+    }
+    if services:
+        doc["service"] = services
+    return doc
+
+
 @app.get("/poser/{username}/did.json", response_class=JSONResponse)
 async def poser_did(username: str):
     """Serve the DID document for a registered user (unique poser_username)."""
@@ -318,28 +426,25 @@ async def poser_did(username: str):
         raise HTTPException(status_code=404, detail="User not found")
     did_id = _did_web_id_for_poser(settings.backend_url, user["poser_username"])
     accounts = await get_user_accounts(user["user_id"])
-    services = []
-    for acc in accounts:
-        if acc["provider"] == "discord":
-            user_id = acc["provider_user_id"] or ""
-            services.append({
-                "id": f"{did_id}#discord",
-                "type": "Discord",
-                "serviceEndpoint": f"https://discord.com/users/{user_id}" if user_id else user_id,
-            })
-        elif acc["provider"] == "twitch":
-            username = (acc.get("provider_username") or acc.get("provider_user_id") or "").strip()
-            services.append({
-                "id": f"{did_id}#twitch",
-                "type": "Twitch",
-                "serviceEndpoint": f"https://www.twitch.tv/{username}" if username else acc["provider_user_id"],
-            })
-    doc = {
-        "@context": ["https://www.w3.org/ns/did/v1"],
-        "id": did_id,
-    }
-    if services:
-        doc["service"] = services
+    doc = _build_user_did_document(user["user_id"], did_id, accounts)
+    return JSONResponse(
+        content=doc,
+        media_type="application/did+ld+json",
+        headers={"Cache-Control": "max-age=300"},
+    )
+
+
+@app.get("/u/{user_id}/did.json", response_class=JSONResponse)
+async def user_did(user_id: str):
+    """Serve the DID document for a user by UUID at /u/{user_id}/did.json (Discord/Twitch services)."""
+    from fastapi import HTTPException
+    from app.db import get_user_accounts
+    profile = await get_user_public(user_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="User not found")
+    did_id = _did_web_id_for_user(settings.backend_url, user_id)
+    accounts = await get_user_accounts(profile["user_id"])
+    doc = _build_user_did_document(profile["user_id"], did_id, accounts)
     return JSONResponse(
         content=doc,
         media_type="application/did+ld+json",

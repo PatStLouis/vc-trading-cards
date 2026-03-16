@@ -21,6 +21,7 @@
     accounts?: LinkedAccount[];
     has_passkey?: boolean;
     passkey_count?: number;
+    pending_issued_count?: number;
     passkeys?: {
       id?: string;
       created_at: string;
@@ -40,6 +41,8 @@
   let passkeyRemoving = $state<string | null>(null);
   let discordRefreshing = $state(false);
   let discordRefreshError = $state('');
+  let twitchRefreshing = $state(false);
+  let twitchRefreshError = $state('');
 
   const API = apiUrl();
 
@@ -141,6 +144,25 @@
       discordRefreshError = 'Refresh failed';
     } finally {
       discordRefreshing = false;
+    }
+  }
+
+  async function refreshTwitchProfile() {
+    if (!user || twitchRefreshing) return;
+    twitchRefreshError = '';
+    twitchRefreshing = true;
+    try {
+      const res = await fetchApi('/api/me/refresh-twitch', { method: 'POST', auth: true });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        twitchRefreshError = data.detail || 'Refresh failed';
+        return;
+      }
+      await load();
+    } catch {
+      twitchRefreshError = 'Refresh failed';
+    } finally {
+      twitchRefreshing = false;
     }
   }
 
@@ -257,9 +279,19 @@
                   <!-- Twitch -->
                   {#if linked}
                     {@const acc = user.accounts?.find((a) => (a.provider || '').toLowerCase() === provider)}
-                    <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#9146FF]/30 text-[#9146FF] dark:bg-[#9146FF]/40" aria-hidden="true">
-                      <svg class="size-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg>
-                    </span>
+                    {#if acc?.provider_avatar}
+                      <img
+                        src={acc.provider_avatar}
+                        alt=""
+                        class="size-10 shrink-0 rounded-full bg-muted object-cover ring-2 ring-background shadow-sm"
+                        width="40"
+                        height="40"
+                      />
+                    {:else}
+                      <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#9146FF]/30 text-[#9146FF] dark:bg-[#9146FF]/40" aria-hidden="true">
+                        <svg class="size-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z"/></svg>
+                      </span>
+                    {/if}
                     <div class="min-w-0 flex-1">
                       <div class="flex items-center gap-2 flex-wrap">
                         <span class="text-sm font-semibold text-foreground">{providerLabel(provider)}</span>
@@ -294,6 +326,22 @@
                   </button>
                   {#if discordRefreshError}
                     <p class="text-xs text-amber-600 dark:text-amber-400 ml-1">{discordRefreshError}</p>
+                  {/if}
+                {:else if !isDiscord && linked}
+                  <button
+                    type="button"
+                    class="linked-card__refresh rounded-lg p-2 text-muted-foreground hover:text-[#9146FF] hover:bg-[#9146FF]/15 transition-colors disabled:opacity-50"
+                    onclick={refreshTwitchProfile}
+                    disabled={twitchRefreshing}
+                    title="Refresh avatar and username from Twitch (no login required)"
+                    aria-label="Refresh Twitch profile"
+                  >
+                    <svg class="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
+                  {#if twitchRefreshError}
+                    <p class="text-xs text-amber-600 dark:text-amber-400 ml-1">{twitchRefreshError}</p>
                   {/if}
                 {:else if !linked}
                   <Button
