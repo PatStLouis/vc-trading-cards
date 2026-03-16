@@ -184,10 +184,10 @@
   <div class="card__translater">
     <button
       class="card__rotator"
-      on:click={activate}
-      on:pointermove={interact}
-      on:mouseout={() => interactEnd()}
-      on:blur={() => { if ($activeCard === thisCard) activeCard.set(null); interactEnd(); }}
+      onclick={activate}
+      onpointermove={interact}
+      onmouseout={() => interactEnd()}
+      onblur={() => { if ($activeCard === thisCard) activeCard.set(null); interactEnd(); }}
       aria-label="Expand card: {name}"
       tabindex="0"
     >
