@@ -103,11 +103,12 @@ _app_origins = [
         "http://127.0.0.1:5175",
     ] if o
 ]
-# Allow /_app/* (SPA assets) to be loaded from opaque origin (e.g. sandboxed iframe with allow-scripts but no same-origin)
+# Allow SPA assets, fonts, and public API from opaque origin (e.g. sandboxed iframe with allow-scripts but no same-origin)
 @app.middleware("http")
-async def _cors_app_assets(request: Request, call_next):
+async def _cors_opaque_origin(request: Request, call_next):
     response = await call_next(request)
-    if request.url.path.startswith("/_app/"):
+    path = request.url.path
+    if path.startswith("/_app/") or path.startswith("/font/") or path.startswith("/api/public/"):
         response.headers.setdefault("Access-Control-Allow-Origin", "*")
     return response
 
