@@ -263,15 +263,14 @@ if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
                 if profile.get("username") or profile.get("poser_username"):
                     desc_parts.append(f"@{profile.get('username') or profile.get('poser_username')}")
                 if profile.get("profile_headline") and profile.get("profile_headline") != title:
-                    desc_parts.append(profile["profile_headline"])
+                    desc_parts.append((profile["profile_headline"] or "").strip())
                 if profile.get("profile_bio"):
                     bio = (profile["profile_bio"] or "")[:200].strip().replace("\n", " ")
                     if len((profile["profile_bio"] or "")) > 200:
                         bio += "…"
                     desc_parts.append(bio)
                 desc_parts.append(f"{profile.get('collection_count') or 0} cards in collection")
-                description = " · ".join(desc_parts) if desc_parts else "Brutality Cards collector"
-                description = description.replace("\n", " ").strip()
+                description = "\n".join(p for p in desc_parts if p) if desc_parts else "Brutality Cards collector"
                 profile_url = f"{base}/u/{user_id}"
                 avatar_url = profile.get("avatar_url") or ""
                 featured_ids = profile.get("featured_card_ids") or []
@@ -296,6 +295,7 @@ if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
                 qrcode.make(profile_url, version=1, box_size=4, border=2).save(qr_buf, format="PNG")
                 qr_b64 = base64.b64encode(qr_buf.getvalue()).decode("ascii")
                 qr_data_url = f"data:image/png;base64,{qr_b64}"
+                deck_url = f"{base}/catalogue?user={user_id}"
                 html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -309,9 +309,21 @@ if _frontend_build_dir and os.path.isdir(_frontend_build_dir):
 <meta name="twitter:description" content="{_html_esc(description)}">
 <meta name="twitter:image" content="{_html_esc(og_image) if og_image else ''}">
 {meta_image_tag}
+<style>
+  body {{ font-family: system-ui, sans-serif; padding: 1rem; max-width: 360px; margin: 0 auto; text-align: center; }}
+  .embed-actions {{ display: flex; flex-direction: column; gap: 0.75rem; margin: 1rem 0; }}
+  .embed-actions a {{ display: block; padding: 0.6rem 1rem; border-radius: 8px; text-decoration: none; font-weight: 500; }}
+  .btn-profile {{ background: #333; color: #fff; border: 2px solid #333; }}
+  .btn-profile:hover {{ background: #555; }}
+  .btn-deck {{ background: transparent; color: #333; border: 2px solid #333; }}
+  .btn-deck:hover {{ background: #eee; }}
+</style>
 </head>
 <body>
-<p><a href="{_html_esc(profile_url)}">View profile</a></p>
+<div class="embed-actions">
+  <a class="btn-profile" href="{_html_esc(profile_url)}">View profile</a>
+  <a class="btn-deck" href="{_html_esc(deck_url)}">Explore deck</a>
+</div>
 <p><img src="{qr_data_url}" alt="QR code: {_html_esc(profile_url)}" width="128" height="128"></p>
 </body>
 </html>"""
