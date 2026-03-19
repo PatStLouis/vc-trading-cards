@@ -1,4 +1,4 @@
-# ACA-Py multitenancy config for Tritone Cards
+# ACA-Py multitenancy config for Brutality Cards
 # Aligned with digicred-crms multitenant pattern (multitenant_provider plugin).
 # Used with: aca-start --arg-file /app/argfile.yml
 

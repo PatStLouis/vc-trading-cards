@@ -1,6 +1,6 @@
-# Tritone Cards — The Devil's Interval Collectible Cards
+# Brutality Cards — The Devil's Interval Collectible Cards
 
-Full-stack app: **landing page**, **Discord OIDC login**, **ACA-Py multitenancy** (one wallet per user), and **wallet browser** with holographic-style collectible cards (Svelte + CSS from pokemon-cards-css / brutality-cards). Theme: **Tritone Cards**, the Devil's Interval Collectible Cards.
+Full-stack app: **landing page**, **Discord OIDC login**, **ACA-Py multitenancy** (one wallet per user), and **wallet browser** with holographic-style collectible cards (Svelte + CSS from pokemon-cards-css / brutality-cards). Theme: **Brutality Cards**, the Devil's Interval Collectible Cards.
 
 ## How to run (full stack)
 

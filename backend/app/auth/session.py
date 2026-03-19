@@ -64,3 +64,23 @@ def session_cookie_kwargs(token: str) -> dict[str, Any]:
         kwargs["samesite"] = "lax"
         kwargs["secure"] = s.backend_url.strip().lower().startswith("https")
     return kwargs
+
+
+def session_cookie_delete_kwargs() -> dict[str, Any]:
+    """Kwargs for Response.delete_cookie(). Must match domain, path, samesite, secure, httponly used when setting the cookie so the browser actually clears it."""
+    s = get_settings()
+    kwargs: dict[str, Any] = {
+        "key": s.session_cookie_name,
+        "path": "/",
+        "httponly": True,
+    }
+    domain = s.cookie_domain_resolved
+    if domain:
+        kwargs["domain"] = domain
+    if s.cross_origin_deploy and s.backend_url.strip().lower().startswith("https"):
+        kwargs["samesite"] = "none"
+        kwargs["secure"] = True
+    else:
+        kwargs["samesite"] = "lax"
+        kwargs["secure"] = s.backend_url.strip().lower().startswith("https")
+    return kwargs

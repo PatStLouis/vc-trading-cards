@@ -1,4 +1,4 @@
-# ACA-Py agent for Tritone Cards (multitenancy via multitenant_provider plugin)
+# ACA-Py agent for Brutality Cards (multitenancy via multitenant_provider plugin)
 # Build: docker build -f agent/Dockerfile -t tritone-cards-acapy agent/
 # Run: docker run --rm -p 8020:8020 -p 8022:8022 -e ACAPY_JWT_SECRET=your-secret tritone-cards-acapy
 #

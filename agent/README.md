@@ -1,6 +1,6 @@
 # ACA-Py Agent (multitenancy)
 
-This directory runs an [ACA-Py](https://aca-py.org/) agent in **multitenancy** mode so the Tritone Cards backend can create one wallet per Discord user and list their credentials. Config follows the same pattern as [digicred-crms](https://github.com/digicred/digicred-crms) (`plugins/docker/default.yml`): **multitenant_provider** plugin with `AskarMultitokenMultitenantManager`, token expiry (1 day), and wallet create/token routes overridden by the plugin.
+This directory runs an [ACA-Py](https://aca-py.org/) agent in **multitenancy** mode so the Brutality Cards backend can create one wallet per Discord user and list their credentials. Config follows the same pattern as [digicred-crms](https://github.com/digicred/digicred-crms) (`plugins/docker/default.yml`): **multitenant_provider** plugin with `AskarMultitokenMultitenantManager`, token expiry (1 day), and wallet create/token routes overridden by the plugin.
 
 ## Quick run with Docker
 

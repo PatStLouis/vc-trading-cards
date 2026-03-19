@@ -11,7 +11,7 @@ from .providers.twitch import (
     exchange_code_for_tokens as twitch_exchange_code,
     get_twitch_user,
 )
-from .session import encode_session, decode_session, session_cookie_kwargs
+from .session import encode_session, decode_session, session_cookie_kwargs, session_cookie_delete_kwargs
 from app.db import (
     get_or_create_user_by_provider,
     get_user_by_provider,
@@ -234,6 +234,6 @@ def _set_session_cookie(response: Response, token: str) -> None:
 
 @router.post("/logout")
 async def logout(response: Response):
-    """Clear session cookie."""
-    response.delete_cookie(settings.session_cookie_name)
+    """Clear session cookie. Uses same domain/path/samesite/secure as set_cookie so the browser actually clears it."""
+    response.delete_cookie(**session_cookie_delete_kwargs())
     return {"ok": True}

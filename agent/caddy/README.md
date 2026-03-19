@@ -1,4 +1,4 @@
-# Caddy reverse proxy for Tritone Cards agent
+# Caddy reverse proxy for Brutality Cards agent
 
 Caddy service that reverse-proxies WebSocket and HTTP traffic to the ACA-Py agent. Exposes the agent’s admin and inbound transport through a single port.
 
